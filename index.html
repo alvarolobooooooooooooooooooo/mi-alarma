@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi Alarma</title>
+<meta name="description" content="Arma, desarma y vigila tu alarma desde el teléfono.">
+<meta name="theme-color" content="#F5F6FB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1024" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="iconos/favicon-32.png">
+<link rel="apple-touch-icon" href="iconos/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mi Alarma">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+<header class="barra">
+  <div class="barra-dentro">
+    <h1 class="barra-titulo" id="titulo">Casa</h1>
+    <button type="button" class="chip" id="chip" data-accion="conectar"></button>
+  </div>
+</header>
+
+<main class="contenido" id="contenido" tabindex="-1"></main>
+
+<nav class="pestanas" aria-label="Secciones">
+  <div class="pestanas-dentro">
+    <a class="pestana" href="#inicio" data-vista="inicio">
+      <span class="pestana-icono">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span class="insignia" id="insigniaInicio" hidden>!<span class="sr"> La alarma está sonando</span></span>
+      </span>
+      <span class="pestana-rotulo" data-ms-rotulo>Inicio</span>
+    </a>
+    <a class="pestana" href="#historial" data-vista="historial">
+      <span class="pestana-icono">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+      </span>
+      <span class="pestana-rotulo" data-ms-rotulo>Historial</span>
+    </a>
+    <a class="pestana" href="#ajustes" data-vista="ajustes">
+      <span class="pestana-icono">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </span>
+      <span class="pestana-rotulo" data-ms-rotulo>Ajustes</span>
+    </a>
+  </div>
+</nav>
+
+<div class="velo" id="velo" hidden></div>
+<section class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hojaTitulo" hidden></section>
+<div class="nota" id="nota" role="status" aria-live="polite" hidden></div>
+
+<noscript><p class="sin-js">Esta app necesita JavaScript para funcionar.</p></noscript>
+
+<script src="vendor/mqtt.min.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
