@@ -448,6 +448,7 @@
     if (entro || otraVez) avisarAlarma(nuevo);
 
     render();
+    if (entro || otraVez) golpeAlarma();
   }
 
   /* ---------- Avisos ---------- */
@@ -458,9 +459,9 @@
     const el = $('#nota');
     el.textContent = texto;
     el.className = 'nota' + (tipo === 'error' ? ' nota--error' : '');
-    el.hidden = false;
+    el.dataset.visible = '';
     clearTimeout(notaTimer);
-    notaTimer = setTimeout(() => { el.hidden = true; }, tipo === 'error' ? 6000 : 3500);
+    notaTimer = setTimeout(() => { delete el.dataset.visible; }, tipo === 'error' ? 6000 : 3500);
   }
 
   function avisarAlarma(a) {
@@ -788,29 +789,105 @@
   /* ---------- Hojas (lo que se llena sube desde abajo) ---------- */
 
   let focoAnterior = null;
+  let cierreTimer = null;
 
   function abrirHoja(titulo, cuerpo) {
+    clearTimeout(cierreTimer);
     focoAnterior = document.activeElement;
     const h = $('#hoja');
-    h.innerHTML = `<div class="hoja-cabeza">
-        <h2 class="hoja-titulo" id="hojaTitulo">${titulo}</h2>
-        <button type="button" class="hoja-cerrar" data-accion="cerrar-hoja" aria-label="Cerrar">${icono('x')}</button>
+    const velo = $('#velo');
+    h.innerHTML = `<div class="hoja-arrastre" data-arrastre>
+        <div class="hoja-asa" aria-hidden="true"></div>
+        <div class="hoja-cabeza">
+          <h2 class="hoja-titulo" id="hojaTitulo">${titulo}</h2>
+          <button type="button" class="hoja-cerrar" data-accion="cerrar-hoja" aria-label="Cerrar">${icono('x')}</button>
+        </div>
       </div>${cuerpo}`;
-    $('#velo').hidden = false;
+    velo.hidden = false;
     h.hidden = false;
+    h.style.transform = '';
+    void h.offsetHeight; // fija la posición de abajo para que la subida se anime
+    h.dataset.abierta = '';
+    velo.dataset.abierto = '';
     document.body.classList.add('con-hoja');
     const primero = h.querySelector('input');
-    (primero || h.querySelector('.hoja-cerrar')).focus();
+    (primero || h.querySelector('.hoja-cerrar')).focus({ preventScroll: true });
   }
 
-  function cerrarHoja() {
+  // Baja por el mismo camino por el que subió; «inmediato» la quita sin animar
+  function cerrarHoja(inmediato) {
     const h = $('#hoja');
-    if (h.hidden) return;
-    h.hidden = true;
-    h.innerHTML = '';
-    $('#velo').hidden = true;
+    const velo = $('#velo');
+    if (h.hidden || !('abierta' in h.dataset)) return;
+    delete h.dataset.abierta;
+    delete velo.dataset.abierto;
+    h.classList.remove('arrastrando');
+    h.style.transform = '';
+    velo.style.opacity = '';
     document.body.classList.remove('con-hoja');
-    if (focoAnterior && focoAnterior.isConnected) focoAnterior.focus();
+    const terminar = () => {
+      h.hidden = true;
+      velo.hidden = true;
+      h.innerHTML = '';
+    };
+    clearTimeout(cierreTimer);
+    if (inmediato === true) terminar();
+    else cierreTimer = setTimeout(terminar, 520);
+    if (focoAnterior && focoAnterior.isConnected) focoAnterior.focus({ preventScroll: true });
+  }
+
+  /*
+    Arrastrar la hoja hacia abajo para cerrarla (skill «apple-design»):
+    sigue al dedo 1:1, resiste si la suben (rubber-band), mide la velocidad
+    al soltar y proyecta hasta dónde llegaría con ese impulso.
+  */
+  let arrastre = null;
+
+  function rubberband(exceso, dimension, constante = 0.55) {
+    return (exceso * dimension * constante) / (dimension + constante * Math.abs(exceso));
+  }
+
+  // Función de proyección de Apple (Designing Fluid Interfaces): velocidad en px/s → distancia en px
+  function proyectar(velocidad, desaceleracion = 0.998) {
+    return (velocidad / 1000) * desaceleracion / (1 - desaceleracion);
+  }
+
+  function empezarArrastre(e) {
+    const h = $('#hoja');
+    if (arrastre || !e.target.closest('[data-arrastre]') || e.target.closest('button, a, input')) return;
+    arrastre = { id: e.pointerId, y0: e.clientY, dy: 0, alto: h.offsetHeight, historia: [{ y: e.clientY, t: e.timeStamp }] };
+    try { h.setPointerCapture(e.pointerId); } catch (err) { /* sin captura igual funciona dentro de la hoja */ }
+    h.classList.add('arrastrando');
+  }
+
+  function moverArrastre(e) {
+    if (!arrastre || e.pointerId !== arrastre.id) return;
+    let dy = e.clientY - arrastre.y0;
+    if (dy < 0) dy = -rubberband(-dy, arrastre.alto); // hacia arriba: resiste
+    arrastre.dy = dy;
+    arrastre.historia.push({ y: e.clientY, t: e.timeStamp });
+    if (arrastre.historia.length > 6) arrastre.historia.shift();
+    $('#hoja').style.transform = `translateY(${dy}px)`;
+    $('#velo').style.opacity = String(Math.max(0, 1 - Math.max(0, dy) / arrastre.alto));
+  }
+
+  function soltarArrastre(e) {
+    if (!arrastre || e.pointerId !== arrastre.id) return;
+    const h = $('#hoja');
+    const historia = arrastre.historia;
+    const a = historia[0];
+    const b = historia[historia.length - 1];
+    const velocidad = ((b.y - a.y) / Math.max(1, b.t - a.t)) * 1000; // px/s, positiva hacia abajo
+    const destino = arrastre.dy + proyectar(velocidad);
+    const cerrar = arrastre.dy > 0 && (destino > arrastre.alto * 0.5 || velocidad > 800);
+    arrastre = null;
+    h.classList.remove('arrastrando');
+    if (cerrar) {
+      cerrarHoja();
+    } else {
+      h.style.transform = ''; // vuelve a su lugar desde donde está, con la curva del cajón
+      $('#velo').style.opacity = '';
+    }
   }
 
   function hojaNombre() {
@@ -878,9 +955,51 @@
     }
   }
 
+  /*
+    Actualizar sin redibujar: en vez de borrar la pantalla y pintarla de nuevo,
+    se compara con lo nuevo y solo se cambia lo que cambió. Así los elementos
+    siguen siendo los mismos y las transiciones de CSS pueden animar el cambio
+    (la tarjeta que pasa a rojo, el botón que cambia de color…), y no se pierde
+    el foco ni el toque en curso.
+  */
+  const plantilla = document.createElement('template');
+
+  function pintar(contenedor, html) {
+    plantilla.innerHTML = html;
+    parcharHijos(contenedor, plantilla.content);
+  }
+
+  function parcharHijos(viejo, nuevo) {
+    const antes = Array.from(viejo.childNodes);
+    const despues = Array.from(nuevo.childNodes);
+    despues.forEach((n, i) => {
+      const v = antes[i];
+      if (!v) {
+        viejo.appendChild(n);
+      } else if (v.nodeType !== n.nodeType || v.nodeName !== n.nodeName) {
+        viejo.replaceChild(n, v);
+      } else if (n.nodeType === Node.ELEMENT_NODE) {
+        parcharElemento(v, n);
+      } else if (v.nodeValue !== n.nodeValue) {
+        v.nodeValue = n.nodeValue;
+      }
+    });
+    for (let i = antes.length - 1; i >= despues.length; i--) viejo.removeChild(antes[i]);
+  }
+
+  function parcharElemento(v, n) {
+    Array.from(v.attributes).forEach((a) => { if (!n.hasAttribute(a.name)) v.removeAttribute(a.name); });
+    Array.from(n.attributes).forEach((a) => { if (v.getAttribute(a.name) !== a.value) v.setAttribute(a.name, a.value); });
+    if (v.tagName === 'INPUT' && v.type === 'checkbox') v.checked = n.hasAttribute('checked');
+    parcharHijos(v, n);
+  }
+
+  const menosMovimiento = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let vistaDibujada = null;
+
   function render() {
     const [clase, texto] = chipDe();
-    $('#chip').innerHTML = `<span class="chip-cuerpo"><span class="punto ${clase}"></span>${texto}</span><span class="sr">. Toca para cambiar la conexión</span>`;
+    pintar($('#chip'), `<span class="chip-cuerpo"><span class="punto ${clase}"></span>${texto}</span><span class="sr">. Toca para cambiar la conexión</span>`);
 
     const sonando = !!(st.alarma && st.alarma.estado === 'alarma');
     document.title = sonando ? '¡Alarma! · Mi Alarma' : 'Mi Alarma';
@@ -889,18 +1008,54 @@
       if (p.dataset.vista === st.vista) p.setAttribute('aria-current', 'page');
       else p.removeAttribute('aria-current');
     });
+    $('#indicador').style.transform = `translateX(${VISTAS.indexOf(st.vista) * 100}%)`;
 
-    $('#contenido').innerHTML =
+    const html =
       st.vista === 'historial' ? vistaHistorial() :
       st.vista === 'ajustes' ? vistaAjustes() :
       vistaInicio();
+    const c = $('#contenido');
+
+    if (vistaDibujada === st.vista) {
+      pintar(c, html);
+    } else {
+      // Otra pestaña: aparece al instante (como en iOS, sin empujón de lado).
+      // Solo la primera vez que se abre la app, el contenido entra escalonado.
+      const primeraVez = vistaDibujada === null;
+      c.innerHTML = html;
+      vistaDibujada = st.vista;
+      if (primeraVez) {
+        c.classList.add('entrada');
+        setTimeout(() => c.classList.remove('entrada'), 700);
+        // El indicador de las pestañas se coloca sin animar y desde ahí ya se desliza
+        requestAnimationFrame(() => requestAnimationFrame(() => $('#indicador').classList.add('listo')));
+      }
+    }
   }
 
+  // Cada número nuevo de la cuenta regresiva entra desde abajo
   function actualizarCuentas() {
-    const s = segundosRestantes(st.alarma);
+    const s = String(segundosRestantes(st.alarma));
     document.querySelectorAll('[data-cuenta]').forEach((el) => {
-      if (el.textContent !== String(s)) el.textContent = s;
+      if (el.textContent === s) return;
+      el.textContent = s;
+      if (!menosMovimiento.matches && el.animate) {
+        el.animate(
+          [{ opacity: 0.3, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }],
+          { duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }
+        );
+      }
     });
+  }
+
+  // Al entrar en alarma, el centro del radar da un golpe: el cambio de estado no pasa desapercibido
+  function golpeAlarma() {
+    const centro = document.querySelector('.heroe .radar-centro');
+    if (!centro || menosMovimiento.matches || !centro.animate) return;
+    centro.animate(
+      [{ transform: 'scale(0.9)' }, { transform: 'scale(1)' }],
+      { duration: 300, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }
+    );
   }
 
   function aplicarLetra() {
@@ -918,7 +1073,7 @@
     const nueva = vistaDelEnlace();
     const cambio = nueva !== st.vista;
     st.vista = nueva;
-    cerrarHoja();
+    cerrarHoja(true);
     render();
     if (cambio) window.scrollTo(0, 0);
   });
@@ -964,7 +1119,13 @@
     }
   });
 
-  $('#velo').addEventListener('click', cerrarHoja);
+  $('#velo').addEventListener('click', () => cerrarHoja());
+
+  const hojaEl = $('#hoja');
+  hojaEl.addEventListener('pointerdown', empezarArrastre);
+  hojaEl.addEventListener('pointermove', moverArrastre);
+  hojaEl.addEventListener('pointerup', soltarArrastre);
+  hojaEl.addEventListener('pointercancel', soltarArrastre);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') cerrarHoja();

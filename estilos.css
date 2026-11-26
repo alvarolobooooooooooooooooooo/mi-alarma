@@ -56,6 +56,7 @@
   --sombra: 0 8px 16px rgba(0, 0, 0, .06);
   --sombra-alta: 0 12px 24px rgba(0, 0, 0, .16);
   --velo: rgba(0, 0, 0, .45);
+  --material: rgba(255, 255, 255, .88);
 
   /* Letra */
   --letra: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -88,6 +89,11 @@
   --pestanas: 68px;
   --columna: 560px;
 
+  /* Movimiento (skills «animate» y «apple-design»): curvas fuertes, nunca ease-in */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
   color-scheme: light;
 }
 
@@ -114,6 +120,7 @@
     --sombra: 0 8px 16px rgba(0, 0, 0, .5);
     --sombra-alta: 0 12px 24px rgba(0, 0, 0, .6);
     --velo: rgba(0, 0, 0, .6);
+    --material: rgba(23, 23, 23, .88);
     color-scheme: dark;
   }
 }
@@ -140,6 +147,7 @@
   --sombra: 0 8px 16px rgba(0, 0, 0, .5);
   --sombra-alta: 0 12px 24px rgba(0, 0, 0, .6);
   --velo: rgba(0, 0, 0, .6);
+  --material: rgba(23, 23, 23, .88);
   color-scheme: dark;
 }
 
@@ -253,6 +261,7 @@ h1, h2, h3 { text-wrap: balance; }
   border-radius: 50%;
   background: var(--gris);
   flex: none;
+  transition: background-color 200ms ease;
 }
 .punto--ok { background: var(--verde); box-shadow: 0 0 0 3px rgba(46, 217, 1, .22); }
 .punto--aviso { background: var(--aviso); }
@@ -322,6 +331,7 @@ h1, h2, h3 { text-wrap: balance; }
 .heroe {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: var(--e-3);
@@ -385,6 +395,7 @@ h1, h2, h3 { text-wrap: balance; }
   inset: 0;
   border-radius: 50%;
   border: 1px solid var(--vidrio-borde);
+  transition: border-color 300ms var(--ease-out);
 }
 .radar-anillo:nth-child(2) { inset: 20px; }
 .radar-anillo:nth-child(3) { inset: 40px; }
@@ -399,8 +410,15 @@ h1, h2, h3 { text-wrap: balance; }
   background: var(--vidrio);
   border: 1px solid var(--vidrio-borde);
   color: var(--sobre-heroe);
+  transition:
+    background-color 300ms var(--ease-out),
+    border-color 300ms var(--ease-out),
+    color 300ms var(--ease-out);
 }
 .radar-centro .ic { width: 32px; height: 32px; }
+
+/* Cada número de la cuenta regresiva entra desde abajo (lo mueve app.js) */
+[data-cuenta] { display: inline-block; }
 
 .cuenta {
   font-size: var(--t-32);
@@ -467,8 +485,17 @@ h1, h2, h3 { text-wrap: balance; }
 .heroe--vigilando .radar-centro { background: var(--verde); border-color: transparent; color: var(--negro); }
 .heroe--vigilando .radar-anillo { border-color: var(--anillo-verde); }
 
-/* Alarma: toda la tarjeta en rojo */
-.heroe--alarma { background: radial-gradient(120% 85% at 88% 0%, var(--rojo-brillo) 0%, var(--rojo) 58%); }
+/* Alarma: una capa roja aparece sobre el negro (indica el cambio de estado sin un salto) */
+.heroe::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(120% 85% at 88% 0%, var(--rojo-brillo) 0%, var(--rojo) 58%);
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out);
+}
+.heroe--alarma::before { opacity: 1; }
 .heroe--alarma .radar-centro { background: var(--blanco); border-color: transparent; color: var(--rojo); }
 .heroe--alarma .radar-anillo { border-color: rgba(255, 255, 255, .5); }
 .heroe--alarma .punto { background: var(--blanco); }
@@ -515,6 +542,10 @@ h1, h2, h3 { text-wrap: balance; }
   text-align: center;
   text-decoration: none;
   cursor: pointer;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 250ms var(--ease-out),
+    color 250ms var(--ease-out);
 }
 
 /* El fuerte: texto a la izquierda y un círculo con el ícono a la derecha */
@@ -533,6 +564,7 @@ h1, h2, h3 { text-wrap: balance; }
   display: grid;
   place-items: center;
   border-radius: 50%;
+  transition: background-color 250ms var(--ease-out), color 250ms var(--ease-out);
 }
 .boton--fuerte .boton-circulo { background: var(--verde); color: var(--negro); }
 .boton--peligro .boton-circulo { background: var(--blanco); color: var(--rojo); }
@@ -551,15 +583,27 @@ h1, h2, h3 { text-wrap: balance; }
 }
 .boton:disabled .boton-circulo { background: var(--linea); color: var(--tinta-3); }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .boton--fuerte:not(:disabled):hover,
   .boton--peligro:not(:disabled):hover { filter: brightness(1.12); }
   .boton--suave:not(:disabled):hover { background: var(--superficie); }
   .accion:not(:disabled):hover .accion-circulo { background: rgba(255, 255, 255, .2); }
 }
 
+/* Al tocar: se hunde al instante (en el toque, no al soltar) */
+.accion-circulo,
+.circulo,
+.chip-cuerpo,
+.hoja-cerrar { transition: transform 160ms var(--ease-out); }
+
 .boton:not(:disabled):active,
-.accion:not(:disabled):active { transform: scale(.98); }
+.circulo:active,
+.chip:active .chip-cuerpo,
+.hoja-cerrar:active,
+.accion:not(:disabled):active .accion-circulo { transform: scale(.97); }
+.pestana:active .pestana-icono { transform: scale(.92); }
+button.fila:active,
+label.fila:active { background: var(--superficie-2); }
 
 .ayuda {
   font-size: var(--t-14);
@@ -653,6 +697,7 @@ h1, h2, h3 { text-wrap: balance; }
   border-radius: 50%;
   background: var(--superficie-2);
   color: var(--tinta);
+  transition: background-color 250ms var(--ease-out), color 250ms var(--ease-out);
 }
 .ficha-icono .ic { width: 20px; height: 20px; }
 .ficha-icono--peligro { background: var(--rojo-suave); color: var(--rojo-texto); }
@@ -700,7 +745,7 @@ h1, h2, h3 { text-wrap: balance; }
 
 button.fila, label.fila { cursor: pointer; }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   button.fila:hover, label.fila:hover { background: var(--superficie-2); }
 }
 
@@ -766,7 +811,7 @@ button.fila, label.fila { cursor: pointer; }
   border-radius: var(--pildora);
   background: var(--interruptor-apagado);
   cursor: pointer;
-  transition: background-color .2s;
+  transition: background-color 200ms ease;
 }
 
 .interruptor::after {
@@ -779,7 +824,7 @@ button.fila, label.fila { cursor: pointer; }
   border-radius: 50%;
   background: var(--blanco);
   box-shadow: 0 2px 4px rgba(0, 0, 0, .24);
-  transition: transform .2s;
+  transition: transform 200ms var(--ease-out);
 }
 
 .interruptor:checked { background: var(--verde); }
@@ -827,7 +872,9 @@ button.fila, label.fila { cursor: pointer; }
   pointer-events: none;
 }
 
+/* Material translúcido: el contenido pasa por debajo, borroso */
 .pestanas-dentro {
+  position: relative;
   max-width: 400px;
   height: var(--pestanas);
   margin: 0 auto;
@@ -835,29 +882,65 @@ button.fila, label.fila { cursor: pointer; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   border-radius: var(--pildora);
-  background: var(--superficie);
+  background: var(--material);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   box-shadow: var(--sombra-alta);
   pointer-events: auto;
 }
 
+/* El indicador negro se desliza a la pestaña elegida (lo mueve app.js).
+   Copia la forma de una pestaña para quedar justo detrás del ícono. */
+.indicador {
+  position: absolute;
+  top: var(--e-1);
+  bottom: var(--e-1);
+  left: var(--e-1);
+  width: calc((100% - 2 * var(--e-1)) / 3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.indicador.listo { transition: transform 250ms var(--ease-in-out); }
+
+.indicador-pastilla {
+  width: 56px;
+  height: 36px;
+  border-radius: var(--pildora);
+  background: var(--primario);
+}
+
+.indicador-rotulo {
+  font-size: .6875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  visibility: hidden;
+}
+
 .pestana {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
   border-radius: var(--pildora);
-  color: var(--tinta-3);
+  color: var(--tinta-2);
   text-decoration: none;
 }
 
 .pestana-icono {
   position: relative;
-  width: 40px;
+  width: 56px;
   height: 36px;
   display: grid;
   place-items: center;
   border-radius: var(--pildora);
+  transition: color 250ms var(--ease-in-out), transform 160ms var(--ease-out);
 }
 .pestana-icono .ic { width: 20px; height: 20px; }
 
@@ -869,7 +952,7 @@ button.fila, label.fila { cursor: pointer; }
 }
 
 .pestana[aria-current="page"] { color: var(--tinta); }
-.pestana[aria-current="page"] .pestana-icono { width: 56px; background: var(--primario); color: var(--sobre-primario); }
+.pestana[aria-current="page"] .pestana-icono { color: var(--sobre-primario); }
 .pestana[aria-current="page"] .pestana-rotulo { font-weight: 600; }
 
 .insignia {
@@ -896,7 +979,10 @@ button.fila, label.fila { cursor: pointer; }
   inset: 0;
   z-index: 40;
   background: var(--velo);
+  opacity: 0;
+  transition: opacity 500ms var(--ease-drawer);
 }
+.velo[data-abierto] { opacity: 1; }
 
 .hoja {
   position: fixed;
@@ -918,6 +1004,31 @@ button.fila, label.fila { cursor: pointer; }
   border-radius: var(--c-32) var(--c-32) 0 0;
   background: var(--superficie);
   box-shadow: var(--sombra-alta);
+  /* Sube y baja por el mismo camino, con la curva de los cajones de iOS */
+  transform: translateY(100%);
+  transition: transform 500ms var(--ease-drawer);
+}
+.hoja[data-abierta] { transform: translateY(0); }
+.hoja.arrastrando { transition: none; }
+
+/* Zona para arrastrar la hoja hacia abajo y cerrarla */
+.hoja-arrastre {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  margin-top: calc(-1 * var(--e-3));
+  padding-top: var(--e-2);
+  touch-action: none;
+  cursor: grab;
+}
+.hoja.arrastrando .hoja-arrastre { cursor: grabbing; }
+
+.hoja-asa {
+  width: 40px;
+  height: 5px;
+  margin: 0 auto;
+  border-radius: var(--pildora);
+  background: var(--linea-campo);
 }
 
 .hoja-cabeza {
@@ -955,16 +1066,6 @@ button.fila, label.fila { cursor: pointer; }
   border-radius: var(--pildora);
   background: var(--superficie-2);
   font-size: var(--t-14);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .hoja:not([hidden]) { animation: subir .26s ease-out; }
-  .velo:not([hidden]) { animation: aparecer .2s ease-out; }
-}
-
-@keyframes subir {
-  from { transform: translateY(32px); opacity: 0; }
-  to { transform: none; opacity: 1; }
 }
 
 @keyframes aparecer {
@@ -1045,8 +1146,15 @@ button.fila, label.fila { cursor: pointer; }
   z-index: 60;
   width: max-content;
   max-width: min(528px, calc(100% - 32px));
-  transform: translateX(-50%);
   padding: var(--e-3) var(--e-6);
+  /* Escondida arriba; baja al mostrarse y sube al irse (transiciones: se pueden repetir rápido) */
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -16px);
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease,
+    visibility 0s linear 400ms;
   border-radius: var(--pildora);
   background: var(--primario);
   color: var(--sobre-primario);
@@ -1062,13 +1170,50 @@ button.fila, label.fila { cursor: pointer; }
   color: var(--rojo-texto);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .nota:not([hidden]) { animation: bajar .2s ease-out; }
+.nota[data-visible] {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
 }
 
-@keyframes bajar {
-  from { transform: translate(-50%, -8px); opacity: 0; }
-  to { transform: translate(-50%, 0); opacity: 1; }
+/* ---------- Al abrir la app: el contenido entra escalonado (solo esa vez) ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .entrada > * { animation: entrar 300ms var(--ease-out) both; }
+  .entrada > :nth-child(2) { animation-delay: 50ms; }
+  .entrada > :nth-child(3) { animation-delay: 100ms; }
+  .entrada > :nth-child(4) { animation-delay: 150ms; }
+  .entrada > :nth-child(n+5) { animation-delay: 200ms; }
+}
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Reducir movimiento: menos y más suave, nunca cero ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .entrada > * { animation: aparecer 200ms ease both; }
+  .hoja { transform: none; opacity: 0; transition: opacity 200ms ease; }
+  .hoja[data-abierta] { opacity: 1; }
+  .velo { transition-duration: 200ms; }
+  .nota { transform: translate(-50%, 0); }
+  .indicador.listo { transition: none; }
+  .boton:not(:disabled):active,
+  .circulo:active,
+  .chip:active .chip-cuerpo,
+  .hoja-cerrar:active,
+  .accion:not(:disabled):active .accion-circulo,
+  .pestana:active .pestana-icono { transform: none; }
+}
+
+/* ---------- Reducir transparencia: el vidrio se vuelve sólido ---------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  .pestanas-dentro { background: var(--superficie); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .pastilla-vidrio { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 .sin-js {
