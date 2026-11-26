@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mi Alarma</title>
 <meta name="description" content="Arma, desarma y vigila tu alarma desde el teléfono.">
-<meta name="theme-color" content="#F5F6FB" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0E1024" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#DEDEDE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0B0B" media="(prefers-color-scheme: dark)">
+<link rel="preload" href="fuentes/outfit.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="iconos/favicon-32.png">
 <link rel="apple-touch-icon" href="iconos/apple-touch-icon.png">
@@ -20,7 +21,9 @@
 
 <header class="barra">
   <div class="barra-dentro">
-    <h1 class="barra-titulo" id="titulo">Casa</h1>
+    <span class="marca" aria-hidden="true">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+    </span>
     <button type="button" class="chip" id="chip" data-accion="conectar"></button>
   </div>
 </header>

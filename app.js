@@ -46,6 +46,8 @@
     letra: '<path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/>',
     reiniciar: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     derecha: '<path d="m9 18 6-6-6-6"/>',
+    adelante: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    diagonal: '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   };
@@ -486,14 +488,26 @@
 
   /* ---------- Pantallas ---------- */
 
+  // El botón fuerte lleva el texto a la izquierda y un círculo con el ícono a la derecha
   function boton({ cmd, accion, texto, tipo, ic, deshabilitado }) {
     const attr = cmd ? `data-cmd="${cmd}"` : `data-accion="${accion}"`;
-    return `<button type="button" class="boton boton--${tipo}" ${attr}${deshabilitado ? ' disabled' : ''}>${ic ? icono(ic, 'ic--20') : ''}<span>${texto}</span></button>`;
+    const fuerte = tipo === 'fuerte' || tipo === 'peligro';
+    const interior = fuerte
+      ? `<span>${texto}</span><span class="boton-circulo">${icono(ic || 'adelante', 'ic--20')}</span>`
+      : `${ic ? icono(ic, 'ic--20') : ''}<span>${texto}</span>`;
+    return `<button type="button" class="boton boton--${tipo}" ${attr}${deshabilitado ? ' disabled' : ''}>${interior}</button>`;
+  }
+
+  function titular(titulo, sub) {
+    return `<section class="titular">
+      <h1 class="titular-texto">${esc(titulo)}</h1>
+      ${sub ? `<p class="titular-sub">${sub}</p>` : ''}
+    </section>`;
   }
 
   function aviso(ic, titulo, texto, conEnlace) {
     return `<section class="aviso">
-      <span class="aviso-icono">${icono(ic)}</span>
+      <span class="aviso-icono">${icono(ic, 'ic--20')}</span>
       <div class="aviso-cuerpo">
         <h2 class="aviso-titulo">${titulo}</h2>
         <p class="aviso-texto">${texto}</p>
@@ -518,13 +532,14 @@
     }
   }
 
-  function tarjetaEstado(a) {
-    const viejo = prefs.modo === 'real' && st.conexion !== 'en_linea';
-    let clase = '';
-    let ic = 'escudo';
+  // La tarjeta negra protagonista: estado, radar y accesos rápidos
+  function heroe(a) {
+    const real = prefs.modo === 'real';
+    const viejo = real && st.conexion !== 'en_linea';
+    let clase = 'heroe--' + a.estado;
+    let centro = icono('escudo');
     let titulo = '';
     let texto = '';
-    let extra = '';
 
     switch (a.estado) {
       case 'desarmada':
@@ -536,38 +551,59 @@
         if (viejo) {
           texto = 'Se estaba armando cuando se perdió la conexión.';
         } else {
-          texto = 'Sal de la zona del sensor. Empieza a vigilar en:';
-          extra = `<p class="cuenta"><span data-cuenta>${segundosRestantes(a)}</span> <small>s</small></p>`;
+          texto = 'Sal de la zona del sensor antes de que empiece a vigilar.';
+          centro = `<span class="cuenta"><span data-cuenta>${segundosRestantes(a)}</span><small>s</small></span>`;
         }
         break;
       case 'vigilando':
-        clase = 'estado--ok';
-        ic = 'escudoCheck';
+        centro = icono('escudoCheck');
         titulo = 'Vigilando';
         texto = 'Te avisa si alguien pasa frente al sensor.';
         break;
       case 'alarma':
-        clase = 'estado--peligro';
-        ic = 'escudoAlerta';
+        centro = icono('escudoAlerta');
         titulo = '¡Movimiento detectado!';
         texto = `${a.ultimo ? cuando(a.ultimo) + ' · ' : ''}${a.sirena ? 'La sirena está sonando.' : 'La sirena ya se apagó, pero sigue en alarma.'}`;
         break;
     }
+    if (viejo) {
+      clase = 'heroe--desarmada';
+      texto += ' Es el último estado conocido.';
+    }
 
-    if (viejo) extra += '<p class="estado-nota">Último estado conocido: ahora mismo la alarma no está conectada.</p>';
+    const sensor = a.sensor
+      ? `<span class="punto punto--peligro"></span>Sensor: ve movimiento`
+      : `<span class="punto"></span>Sensor: quieto`;
 
-    return `<section class="estado ${clase}">
-      <div class="estado-cabeza">
-        <span class="estado-icono">${icono(ic)}</span>
-        <div class="estado-textos">
-          <h2 class="estado-titulo">${titulo}</h2>
-          <p class="estado-texto">${texto}</p>
-        </div>
+    // Accesos rápidos; durante la alarma no se muestran, para que «Apagar alarma» quede a la vista
+    const accionesRapidas = [];
+    if (a.estado === 'desarmada' && !st.pendiente) {
+      accionesRapidas.push(`<button type="button" class="accion" data-cmd="probar"${viejo ? ' disabled' : ''}>
+        <span class="accion-circulo">${icono('volumen')}</span><span>Probar sirena</span></button>`);
+    }
+    if (!real && a.estado !== 'alarma') {
+      accionesRapidas.push(`<button type="button" class="accion" data-accion="simular">
+        <span class="accion-circulo">${icono('persona')}</span><span>Simular persona</span></button>`);
+    }
+
+    return `<section class="heroe ${clase}">
+      <div class="heroe-arriba">
+        <span class="pastilla-vidrio">${sensor}</span>
+        <a class="circulo circulo--blanco" href="#historial" aria-label="Ver el historial">${icono('diagonal', 'ic--20')}</a>
       </div>
-      ${extra}
+      <div class="radar" aria-hidden="true">
+        <span class="radar-anillo"></span><span class="radar-anillo"></span><span class="radar-anillo"></span>
+        <span class="radar-centro">${centro}</span>
+      </div>
+      <div class="heroe-texto">
+        <h2 class="heroe-titulo">${titulo}</h2>
+        <p class="heroe-sub">${texto}</p>
+      </div>
+      ${accionesRapidas.length ? `<div class="heroe-acciones">${accionesRapidas.join('')}</div>` : ''}
     </section>`;
   }
 
+  // Un solo botón fuerte: armar, desarmar o apagar
   function acciones(a) {
     const real = prefs.modo === 'real';
     const apagada = real && st.conexion !== 'en_linea';
@@ -576,52 +612,35 @@
     let principal;
 
     if (ocupado) {
-      principal = boton({ cmd: st.pendiente.cmd, texto: 'Enviando a la alarma…', tipo: 'fuerte', deshabilitado: true });
+      principal = boton({ cmd: st.pendiente.cmd, texto: 'Enviando a la alarma…', tipo: 'fuerte', ic: 'reloj', deshabilitado: true });
     } else if (!a || a.estado === 'desarmada') {
-      principal = boton({ cmd: 'armar', texto: 'Armar alarma', tipo: 'fuerte', ic: 'escudoCheck', deshabilitado });
+      principal = boton({ cmd: 'armar', texto: 'Armar alarma', tipo: 'fuerte', ic: 'adelante', deshabilitado });
     } else if (a.estado === 'alarma') {
       principal = boton({ cmd: 'desarmar', texto: 'Apagar alarma', tipo: 'peligro', ic: 'volumenX', deshabilitado });
     } else {
-      principal = boton({ cmd: 'desarmar', texto: 'Desarmar alarma', tipo: 'fuerte', ic: 'escudo', deshabilitado });
+      principal = boton({ cmd: 'desarmar', texto: 'Desarmar alarma', tipo: 'fuerte', ic: 'x', deshabilitado });
     }
 
-    const prueba = a && a.estado === 'desarmada' && !ocupado
-      ? boton({ cmd: 'probar', texto: 'Hacer sonar la sirena 1 segundo', tipo: 'suave', ic: 'volumen', deshabilitado: apagada })
-      : '';
-
     const ayuda = apagada ? '<p class="ayuda">Los botones se activan cuando la alarma esté conectada.</p>' : '';
-
-    return `<div class="acciones">${principal}${prueba}${ayuda}</div>`;
+    return `<div class="acciones">${principal}${ayuda}</div>`;
   }
 
-  function tarjetaDemo() {
-    return `<section class="tarjeta">
-      <div class="tarjeta-cabeza">
-        <h2 class="tarjeta-titulo">Modo demostración</h2>
-        <p class="tarjeta-texto">Funciona igual que con la alarma de verdad, pero sin piezas. Ármala y toca el botón para hacer como si alguien pasara frente al sensor.</p>
-      </div>
-      ${boton({ accion: 'simular', texto: 'Simular que pasa una persona', tipo: 'suave', ic: 'persona' })}
-      <button type="button" class="enlace" data-accion="conectar">Conectar mi alarma de verdad</button>
-    </section>`;
-  }
-
-  function filaDato(ic, etiqueta, valor) {
-    return `<div class="fila">
-      <span class="fila-icono">${icono(ic)}</span>
-      <span class="fila-texto"><span class="fila-etiqueta">${etiqueta}</span></span>
-      <span class="fila-valor">${valor}</span>
+  function ficha(ic, etiqueta, valor, tono) {
+    return `<div class="ficha">
+      <span class="ficha-icono${tono ? ' ficha-icono--' + tono : ''}">${icono(ic)}</span>
+      <span class="ficha-etiqueta">${etiqueta}</span>
+      <span class="ficha-valor">${valor}</span>
     </div>`;
   }
 
   function detalles(a) {
-    const sensor = a.sensor ? '<span class="punto punto--peligro"></span>Ve movimiento' : 'Quieto';
     return `<section class="grupo">
       <h2 class="rotulo-seccion">Detalles</h2>
-      <div class="lista">
-        ${filaDato('persona', 'Sensor', sensor)}
-        ${filaDato('reloj', 'Última detección', a.ultimo ? cuando(a.ultimo) : 'Ninguna')}
-        ${filaDato(typeof a.rssi === 'number' ? 'wifi' : 'wifiOff', 'Señal WiFi', senal(a.rssi))}
-        ${filaDato('enviar', 'Telegram', a.telegram ? 'Activado' : 'Sin configurar')}
+      <div class="mosaico">
+        ${ficha('persona', 'Sensor', a.sensor ? 'Ve movimiento' : 'Quieto', a.sensor ? 'peligro' : '')}
+        ${ficha('reloj', 'Última detección', a.ultimo ? cuando(a.ultimo) : 'Ninguna')}
+        ${ficha(typeof a.rssi === 'number' ? 'wifi' : 'wifiOff', 'Señal WiFi', senal(a.rssi))}
+        ${ficha('enviar', 'Telegram', a.telegram ? 'Activado' : 'Sin configurar')}
       </div>
     </section>`;
   }
@@ -654,20 +673,25 @@
     </section>`;
   }
 
+  function eventosDeHoy() {
+    const n = st.historial.filter((ev) => ev.t && etiquetaDia(ev.t * 1000) === 'Hoy').length;
+    if (!n) return 'Sin eventos hoy';
+    return `${n} ${n === 1 ? 'evento' : 'eventos'} hoy`;
+  }
+
   function vistaInicio() {
     const a = st.alarma;
     const real = prefs.modo === 'real';
-    const partes = [];
+    const partes = [titular(prefs.nombre, eventosDeHoy() + (real ? '' : ' · datos de ejemplo'))];
 
     if (real && st.conexion !== 'en_linea') partes.push(avisoConexion());
 
     if (a) {
-      partes.push(`<div class="principal">${tarjetaEstado(a)}${acciones(a)}</div>`);
+      partes.push(`<div class="principal">${heroe(a)}${acciones(a)}</div>`);
     } else if (real) {
       partes.push(vacio('escudo', 'Esperando a tu alarma', 'Cuando la alarma se conecte, aquí vas a ver si está vigilando.'));
     }
 
-    if (!real) partes.push(tarjetaDemo());
     if (a) partes.push(detalles(a));
     partes.push(ultimos());
 
@@ -676,9 +700,10 @@
 
   function vistaHistorial() {
     const h = st.historial;
+    const cabeza = titular('Historial', 'Lo que ha pasado con tu alarma');
     if (!h.length) {
       const sinAlarma = prefs.modo === 'real' && st.conexion !== 'en_linea';
-      return vacio('historial', 'Todavía no hay eventos',
+      return cabeza + vacio('historial', 'Todavía no hay eventos',
         sinAlarma ? 'Cuando la alarma se conecte, aquí vas a ver lo que ha pasado.'
                   : 'Cuando la alarma se arme o detecte movimiento, va a aparecer aquí.');
     }
@@ -698,7 +723,7 @@
       ? 'Datos de ejemplo del modo demostración.'
       : 'La alarma guarda sus últimos 15 eventos.';
 
-    return grupos.map((g) => `<section class="grupo">
+    return cabeza + grupos.map((g) => `<section class="grupo">
         <h2 class="rotulo-seccion">${esc(g.dia)}</h2>
         <div class="lista">${g.eventos.map((ev) => filaEvento(ev, false)).join('')}</div>
       </section>`).join('') + `<p class="pie">${pie}</p>`;
@@ -710,6 +735,8 @@
     const telegram = !a ? 'Se sabrá cuando la alarma se conecte' : a.telegram ? 'Activado en la alarma' : 'Sin configurar';
 
     return `
+      ${titular('Ajustes', 'Tu alarma y este teléfono')}
+
       <section class="grupo">
         <h2 class="rotulo-seccion">Tu alarma</h2>
         <div class="lista">
@@ -795,7 +822,7 @@
         <p class="campo-error" id="errNombre" hidden></p>
       </div>
       <div class="formulario-botones">
-        <button type="submit" class="boton boton--fuerte">Guardar nombre</button>
+        <button type="submit" class="boton boton--fuerte"><span>Guardar nombre</span><span class="boton-circulo">${icono('adelante', 'ic--20')}</span></button>
       </div>
     </form>`);
   }
@@ -821,7 +848,7 @@
         </div>
       </details>
       <div class="formulario-botones">
-        <button type="submit" class="boton boton--fuerte">Conectar con mi alarma</button>
+        <button type="submit" class="boton boton--fuerte"><span>Conectar con mi alarma</span><span class="boton-circulo">${icono('adelante', 'ic--20')}</span></button>
         ${real ? '<button type="button" class="boton boton--suave" data-accion="usar-demo">Usar el modo demostración</button>' : ''}
       </div>
     </form>`);
@@ -841,8 +868,6 @@
 
   /* ---------- Dibujar ---------- */
 
-  const TITULOS = { inicio: () => prefs.nombre, historial: () => 'Historial', ajustes: () => 'Ajustes' };
-
   function chipDe() {
     switch (st.conexion) {
       case 'demo': return ['punto--accion', 'Demostración'];
@@ -854,7 +879,6 @@
   }
 
   function render() {
-    $('#titulo').textContent = TITULOS[st.vista]();
     const [clase, texto] = chipDe();
     $('#chip').innerHTML = `<span class="chip-cuerpo"><span class="punto ${clase}"></span>${texto}</span><span class="sr">. Toca para cambiar la conexión</span>`;
 

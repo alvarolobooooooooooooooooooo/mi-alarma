@@ -4,7 +4,7 @@
   internet. Los mensajes con la alarma (MQTT) nunca pasan por aquí.
   Al cambiar cualquier archivo de la app, sube el número de CACHE.
 */
-const CACHE = 'mi-alarma-v1';
+const CACHE = 'mi-alarma-v2';
 
 const ARCHIVOS = [
   './',
@@ -13,6 +13,7 @@ const ARCHIVOS = [
   'app.js',
   'manifest.webmanifest',
   'vendor/mqtt.min.js',
+  'fuentes/outfit.woff2',
   'iconos/icon-192.png',
   'iconos/icon-512.png',
   'iconos/maskable-512.png',
