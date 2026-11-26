@@ -4,7 +4,7 @@
   internet. Los mensajes con la alarma (MQTT) nunca pasan por aquí.
   Al cambiar cualquier archivo de la app, sube el número de CACHE.
 */
-const CACHE = 'mi-alarma-v5';
+const CACHE = 'mi-alarma-v6';
 
 const ARCHIVOS = [
   './',
@@ -65,6 +65,43 @@ self.addEventListener('fetch', (e) => {
       return guardado || deLaRed;
     })
   );
+});
+
+/*
+  Aviso push del ESP32: llega aunque la app esté cerrada. Viene sin contenido
+  (el ESP32 no lo cifra), así que el texto es fijo. Si la app acaba de pedir
+  un aviso de prueba, dejó una marca y se muestra como prueba.
+*/
+self.addEventListener('push', (e) => {
+  e.waitUntil((async () => {
+    let datos = {};
+    try { datos = e.data ? e.data.json() : {}; } catch (err) { /* sin contenido */ }
+
+    let prueba = false;
+    try {
+      const marca = await caches.match('prueba-aviso', { cacheName: 'mi-alarma-datos' });
+      if (marca) {
+        prueba = Date.now() - Number(await marca.text()) < 120000;
+        await (await caches.open('mi-alarma-datos')).delete('prueba-aviso');
+      }
+    } catch (err) { /* sin marca */ }
+
+    const titulo = datos.titulo || (prueba ? 'Aviso de prueba' : '⚠️ ¡Alerta de tu alarma!');
+    const texto = datos.texto || (prueba
+      ? 'Así te van a llegar las alertas, aunque la app esté cerrada.'
+      : 'Detectó movimiento. Toca para ver qué pasó y apagarla.');
+
+    await self.registration.showNotification(titulo, {
+      body: texto,
+      tag: 'alarma',
+      renotify: true,
+      requireInteraction: !prueba,
+      icon: 'iconos/icon-192.png',
+      badge: 'iconos/insignia-96.png',
+      vibrate: prueba ? [200] : [500, 200, 500, 200, 900],
+      data: { url: './#inicio' },
+    });
+  })());
 });
 
 // Tocar el aviso abre la app (o la trae al frente si ya estaba abierta).

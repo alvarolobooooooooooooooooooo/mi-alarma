@@ -15,6 +15,8 @@
 (function () {
   const VERSION = '0.1.0';
   const SERVIDOR_POR_DEFECTO = 'wss://broker.hivemq.com:8884/mqtt';
+  // Clave pública VAPID para los avisos push. La privada está SOLO en el ESP32.
+  const VAPID_PUBLICA = 'BNg-CiMbkg8YUMRybTuJ_go0YIAGGwKJCg62iQKR6rVweDR-i0zs0IAFPz1icFT5fhaHcoSZjuteW8mZ2cQ_CG0';
   const CLAVE_PREFS = 'mi-alarma:prefs';
   const DEMO = { armadoS: 10, sirenaS: 10, sensorS: 5 };
   const ESPERA_RESPUESTA_MS = 7000; // si la alarma no contesta un comando
@@ -422,6 +424,7 @@
         }
         clearTimeout(gracia);
         c.subscribe([b + 'conexion', b + 'estado', b + 'historial'], { qos: 1 });
+        registrarTelefono(c); // se repite en cada conexión: si la alarma lo olvidó, lo vuelve a anotar
         if (ordenEnEspera) {
           c.publish(b + 'cmd', ordenEnEspera, { qos: 1, retain: false });
           ordenEnEspera = null;
@@ -486,6 +489,9 @@
         telegram: d.telegram ? 1 : 0,
         sirena: d.sirena ? 1 : 0,
         ultimo: d.ultimo || 0,
+        avisos: d.avisos || 0,
+        ultimoAviso: d.ultimoAviso || 0,
+        motivo: typeof d.motivo === 'string' ? d.motivo : '',
       });
     } else if (tema === 'historial') {
       try {
@@ -503,6 +509,7 @@
     armar: (e) => e === 'armando' || e === 'vigilando',
     desarmar: (e) => e === 'desarmada',
     probar: () => true,
+    'aviso-prueba': () => true,
   };
 
   const EN_CAMINO = ['conectando', 'reconectando', 'esperando'];
@@ -590,6 +597,66 @@
         }))
         .catch(() => {});
     }
+  }
+
+  /* ---------- Avisos push: llegan aunque la app esté cerrada ----------
+     El teléfono le pide a Apple o Google una «dirección de aviso» y la app se la
+     anota a la alarma por MQTT (push/alta). Cuando hay alarma, el ESP32 manda el
+     aviso firmado con su clave VAPID directo a esa dirección. Sin servidor propio. */
+
+  function claveABytes(b64url) {
+    const relleno = '='.repeat((4 - (b64url.length % 4)) % 4);
+    const binario = atob((b64url + relleno).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(binario, (c) => c.charCodeAt(0));
+  }
+
+  async function suscribirAvisos() {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveABytes(VAPID_PUBLICA) });
+    }
+    prefs.pushDireccion = sub.endpoint;
+    guardarPrefs();
+    registrarTelefono(cliente);
+  }
+
+  async function desactivarAvisos() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          if (prefs.modo === 'real' && cliente && cliente.connected) {
+            cliente.publish(base() + 'push/baja', sub.endpoint, { qos: 1 });
+          }
+          await sub.unsubscribe();
+        }
+      }
+    } catch (e) { /* ya no estaba suscrito */ }
+    prefs.pushDireccion = '';
+  }
+
+  // Se llama en cada conexión: si la alarma se reinició o lo olvidó, lo vuelve a anotar
+  function registrarTelefono(c) {
+    if (prefs.modo !== 'real' || !prefs.avisos || !prefs.pushDireccion || !c || !c.connected) return;
+    c.publish(base() + 'push/alta', prefs.pushDireccion, { qos: 1 });
+  }
+
+  // El aviso llega sin contenido, igual que uno de verdad. Esta marca le dice al
+  // service worker que es de prueba, para que no muestre «¡Alerta!».
+  function marcarPrueba() {
+    if (!('caches' in window)) return Promise.resolve();
+    return caches.open('mi-alarma-datos')
+      .then((c) => c.put('prueba-aviso', new Response(String(Date.now()))))
+      .catch(() => {});
+  }
+
+  function textoUltimoAviso(a) {
+    if (!a || !a.ultimoAviso) return '';
+    if (a.ultimoAviso === 201) return 'El último aviso se entregó bien.';
+    if (a.ultimoAviso === -1) return 'El último aviso no salió: la alarma todavía no sabía la hora.';
+    return `El último aviso no se entregó (código ${a.ultimoAviso}${a.motivo ? ' · ' + esc(a.motivo) : ''}).`;
   }
 
   const esIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -846,6 +913,14 @@
     const real = prefs.modo === 'real';
     const a = st.alarma;
     const telegram = !a ? 'Se sabrá cuando la alarma se conecte' : a.telegram ? 'Activado en la alarma' : 'Sin configurar';
+    const subAvisos = !real
+      ? 'En la demostración, solo con la app abierta'
+      : prefs.avisos ? 'Te llegan aunque la app esté cerrada' : 'Para enterarte aunque la app esté cerrada';
+    const conPush = real && prefs.avisos;
+    const telefonos = a && a.avisos ? `La alarma avisa a ${a.avisos} ${a.avisos === 1 ? 'teléfono' : 'teléfonos'}. ` : '';
+    const ayudaAvisos = conPush
+      ? `${telefonos}${textoUltimoAviso(a)}`
+      : 'Actívalos para que te llegue una notificación cuando la alarma detecte a alguien.';
 
     return `
       ${titular('Ajustes', 'Tu alarma y este teléfono')}
@@ -871,7 +946,7 @@
         <div class="lista">
           <label class="fila" for="swAvisos">
             <span class="fila-icono">${icono('campana')}</span>
-            <span class="fila-texto"><span class="fila-titulo">Avisos en este teléfono</span><span class="fila-sub">Con la app abierta o en segundo plano</span></span>
+            <span class="fila-texto"><span class="fila-titulo">Avisos en este teléfono</span><span class="fila-sub">${subAvisos}</span></span>
             <input type="checkbox" role="switch" class="interruptor" id="swAvisos"${prefs.avisos ? ' checked' : ''}>
           </label>
           <div class="fila">
@@ -879,7 +954,8 @@
             <span class="fila-texto"><span class="fila-titulo">Avisos por Telegram</span><span class="fila-sub">${telegram}</span></span>
           </div>
         </div>
-        <p class="ayuda-lista">Telegram te avisa aunque el teléfono esté bloqueado. Se configura en el código del ESP32.</p>
+        ${ayudaAvisos ? `<p class="ayuda-lista">${ayudaAvisos}</p>` : ''}
+        ${conPush ? boton({ accion: 'aviso-prueba', texto: 'Mandarme un aviso de prueba', tipo: 'suave', ic: 'campana', deshabilitado: !!st.pendiente }) : ''}
       </section>
 
       <section class="grupo">
@@ -1208,6 +1284,12 @@
       case 'simular':
         demo.mover();
         break;
+      case 'aviso-prueba':
+        marcarPrueba().then(() => {
+          enviar('aviso-prueba');
+          nota('Pedido enviado. Cierra la app: en unos segundos te llega el aviso.');
+        });
+        break;
       case 'conectar':
         hojaConexion();
         break;
@@ -1336,12 +1418,15 @@
     if (e.target.id !== 'swAvisos') return;
 
     if (!e.target.checked) {
+      await desactivarAvisos();
       prefs.avisos = false;
       guardarPrefs();
+      render();
       return;
     }
 
-    if (!('Notification' in window)) {
+    const puedePush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    if (!puedePush) {
       e.target.checked = false;
       nota(esIOS()
         ? 'En iPhone, primero agrega la app a la pantalla de inicio. Después activa los avisos desde ahí.'
@@ -1353,11 +1438,27 @@
     if (permiso === 'default') {
       try { permiso = await Notification.requestPermission(); } catch (err) { permiso = 'denied'; }
     }
+    if (permiso !== 'granted') {
+      prefs.avisos = false;
+      guardarPrefs();
+      nota('El teléfono no dio permiso para avisos. Puedes activarlo en los ajustes del teléfono.', 'error');
+      render();
+      return;
+    }
 
-    prefs.avisos = permiso === 'granted';
+    prefs.avisos = true;
+    if (prefs.modo === 'real') {
+      try {
+        await suscribirAvisos();
+        nota('Listo: te avisaremos aunque la app esté cerrada.');
+      } catch (err) {
+        prefs.avisos = false;
+        nota('No se pudieron activar los avisos en este teléfono. Inténtalo otra vez.', 'error');
+      }
+    } else {
+      nota('Listo. En la demostración los avisos llegan solo con la app abierta.');
+    }
     guardarPrefs();
-    if (prefs.avisos) nota('Listo: te avisaremos en este teléfono.');
-    else nota('El teléfono no dio permiso para avisos. Puedes activarlo en los ajustes del navegador.', 'error');
     render();
   });
 
@@ -1401,5 +1502,12 @@
   const origenSeguro = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if ('serviceWorker' in navigator && origenSeguro) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* sin modo sin conexión */ });
+
+    // Avisos ya activados (o activados en una versión anterior): se asegura la
+    // suscripción push. Con el permiso ya dado no hace falta tocar nada.
+    if (prefs.modo === 'real' && prefs.avisos && 'PushManager' in window &&
+        'Notification' in window && Notification.permission === 'granted') {
+      suscribirAvisos().catch(() => { /* se reintenta la próxima vez que se abra */ });
+    }
   }
 })();
