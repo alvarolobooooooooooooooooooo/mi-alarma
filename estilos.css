@@ -984,14 +984,17 @@ button.fila, label.fila { cursor: pointer; }
 }
 .velo[data-abierto] { opacity: 1; }
 
+/* --teclado y --alto-visible los pone app.js cuando sale el teclado:
+   en iPhone el teclado tapa lo de abajo sin achicar la pantalla,
+   así que la hoja se sube justo encima de él y se acorta si hace falta. */
 .hoja {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--teclado, 0px);
   z-index: 50;
   max-width: var(--columna);
-  max-height: 90dvh;
+  max-height: min(90dvh, calc(var(--alto-visible, 100dvh) - var(--e-6)));
   margin: 0 auto;
   overflow-y: auto;
   display: flex;
@@ -1009,6 +1012,8 @@ button.fila, label.fila { cursor: pointer; }
   transition: transform 500ms var(--ease-drawer);
 }
 .hoja[data-abierta] { transform: translateY(0); }
+/* Con el teclado abierto no hace falta el margen de la barra de inicio del iPhone */
+:root[data-teclado] .hoja { padding-bottom: var(--e-4); }
 .hoja.arrastrando { transition: none; }
 
 /* Zona para arrastrar la hoja hacia abajo y cerrarla */

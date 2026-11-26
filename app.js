@@ -1121,6 +1121,26 @@
 
   $('#velo').addEventListener('click', () => cerrarHoja());
 
+  /*
+    El teclado del iPhone tapa la parte de abajo sin achicar la pantalla.
+    visualViewport dice cuánto se ve de verdad: con eso se calcula cuánto
+    ocupa el teclado y la hoja se sube justo encima (ver .hoja en estilos.css).
+  */
+  function ajustarTeclado() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const teclado = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    const raiz = document.documentElement;
+    raiz.style.setProperty('--teclado', `${teclado}px`);
+    raiz.style.setProperty('--alto-visible', `${Math.round(vv.height)}px`);
+    raiz.toggleAttribute('data-teclado', teclado > 0);
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', ajustarTeclado);
+    window.visualViewport.addEventListener('scroll', ajustarTeclado);
+    ajustarTeclado();
+  }
+
   const hojaEl = $('#hoja');
   hojaEl.addEventListener('pointerdown', empezarArrastre);
   hojaEl.addEventListener('pointermove', moverArrastre);
