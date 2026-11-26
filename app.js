@@ -283,26 +283,83 @@
   };
 
   /* ---------- Conexión real con el ESP32 (MQTT) ---------- */
+  /*
+    conexion: demo · conectando · reconectando · esperando · en_linea · alarma_fuera · sin_servidor
+
+    Al salir de la app el teléfono corta la conexión para ahorrar batería.
+    Al volver:
+      - se reconecta de inmediato (no se espera a descubrir que se cortó),
+      - se sigue mostrando el último estado conocido, con «Actualizando…»,
+      - los botones funcionan: la orden espera y sale apenas hay conexión,
+      - «Sin internet» solo aparece si de verdad no se pudo en GRACIA_MS.
+  */
+  const GRACIA_MS = 10000;
+  const CLAVE_ULTIMO = 'mi-alarma:ultimo';
 
   let cliente = null;
   let esperaAlarma = null;
+  let gracia = null;
+  let ordenEnEspera = null;
   const base = () => `seguridad/${prefs.codigo}/`;
 
-  function desconectar() {
-    clearTimeout(esperaAlarma);
+  // Lo último que se supo de la alarma, para mostrarlo al instante al abrir la app
+  function guardarUltimo() {
+    if (prefs.modo !== 'real' || !st.alarma) return;
+    try {
+      localStorage.setItem(CLAVE_ULTIMO, JSON.stringify({ codigo: prefs.codigo, alarma: st.alarma, historial: st.historial }));
+    } catch (e) { /* sin almacenamiento: solo se pierde el arranque rápido */ }
+  }
+
+  function leerUltimo() {
+    try {
+      const u = JSON.parse(localStorage.getItem(CLAVE_ULTIMO));
+      if (u && u.codigo === prefs.codigo && u.alarma && ESTADOS.includes(u.alarma.estado)) return u;
+    } catch (e) { /* nada guardado */ }
+    return null;
+  }
+
+  function cancelarPendiente() {
     if (st.pendiente) {
       clearTimeout(st.pendiente.timer);
       st.pendiente = null;
     }
-    if (cliente) {
-      const viejo = cliente;
-      cliente = null;
-      try { viejo.end(true); } catch (e) { /* ya estaba cerrado */ }
-    }
+    ordenEnEspera = null;
   }
 
-  function conectar() {
+  let generacion = 0;   // cada conectar() nuevo deja sin efecto a los anteriores
+  let intentos = [];
+  let refuerzo = null;
+
+  function desconectar() {
+    generacion++;
+    clearTimeout(esperaAlarma);
+    clearTimeout(gracia);
+    clearTimeout(refuerzo);
+    intentos.forEach((c) => { try { c.end(true); } catch (e) { /* ya estaba cerrado */ } });
+    intentos = [];
+    cliente = null;
+  }
+
+  // Se cortó la conexión: se reintenta en silencio y solo después de GRACIA_MS se avisa
+  function empezarGracia(este) {
+    if (st.conexion !== 'reconectando' && st.conexion !== 'conectando') {
+      st.conexion = 'reconectando';
+      render();
+    }
+    clearTimeout(gracia);
+    gracia = setTimeout(() => {
+      if (este === cliente && !este.connected) {
+        st.conexion = 'sin_servidor';
+        render();
+      }
+    }, GRACIA_MS);
+  }
+
+  // reanudar: volver a conectar sin borrar lo que se ve ni la orden que espera
+  function conectar(opciones = {}) {
+    const reanudar = !!opciones.reanudar;
     desconectar();
+    if (!reanudar) cancelarPendiente();
 
     if (prefs.modo !== 'real' || !prefs.codigo) {
       prefs.modo = 'demo';
@@ -312,8 +369,12 @@
     }
 
     sonido.detener();
-    st.alarma = null;
-    st.historial = [];
+
+    if (!reanudar) {
+      const ultimo = leerUltimo();
+      st.alarma = ultimo ? ultimo.alarma : null;
+      st.historial = ultimo ? ultimo.historial : [];
+    }
 
     if (!window.mqtt) {
       st.conexion = 'sin_servidor';
@@ -321,60 +382,93 @@
       return;
     }
 
-    st.conexion = 'conectando';
+    st.conexion = st.alarma ? 'reconectando' : 'conectando';
     render();
 
-    let este;
-    try {
-      este = window.mqtt.connect(prefs.servidor, {
-        clientId: 'app-' + Math.random().toString(16).slice(2, 10),
-        clean: true,
-        keepalive: 30,
-        reconnectPeriod: 4000,
-        connectTimeout: 10000,
+    const gen = generacion;
+    const b = base();
+    let ganador = null;
+
+    // Abre un intento de conexión. Si hay dos a la vez, gana el primero que conecte.
+    const intentar = () => {
+      let c;
+      try {
+        c = window.mqtt.connect(prefs.servidor, {
+          clientId: 'app-' + Math.random().toString(16).slice(2, 10),
+          clean: true,
+          keepalive: 20,
+          // El servidor gratuito a veces no contesta un intento: mejor rendirse
+          // rápido y reintentar (el siguiente casi siempre entra en ~1 s)
+          reconnectPeriod: 500,
+          connectTimeout: 3000,
+        });
+      } catch (e) {
+        return null;
+      }
+      intentos.push(c);
+
+      c.on('connect', () => {
+        if (gen !== generacion) return;
+        if (ganador && ganador !== c) {
+          try { c.end(true); } catch (e) { /* nada */ }
+          return;
+        }
+        if (!ganador) {
+          ganador = c;
+          cliente = c;
+          clearTimeout(refuerzo);
+          intentos.filter((o) => o !== c).forEach((o) => { try { o.end(true); } catch (e) { /* nada */ } });
+          intentos = [c];
+        }
+        clearTimeout(gracia);
+        c.subscribe([b + 'conexion', b + 'estado', b + 'historial'], { qos: 1 });
+        if (ordenEnEspera) {
+          c.publish(b + 'cmd', ordenEnEspera, { qos: 1, retain: false });
+          ordenEnEspera = null;
+        }
+        if (st.conexion !== 'en_linea') {
+          st.conexion = 'esperando';
+          render();
+        }
+        clearTimeout(esperaAlarma);
+        esperaAlarma = setTimeout(() => {
+          if (gen === generacion && st.conexion === 'esperando') {
+            st.conexion = 'alarma_fuera';
+            render();
+          }
+        }, ESPERA_ALARMA_MS);
       });
-    } catch (e) {
+
+      c.on('message', (tema, datos) => {
+        if (gen !== generacion || c !== cliente || !tema.startsWith(b)) return;
+        recibir(tema.slice(b.length), datos.toString());
+      });
+
+      c.on('offline', () => {
+        if (gen === generacion && ganador === c) empezarGracia(c);
+      });
+
+      c.on('close', () => {
+        if (gen !== generacion || ganador !== c) return;
+        if (st.conexion === 'en_linea' || st.conexion === 'esperando') empezarGracia(c);
+      });
+
+      return c;
+    };
+
+    const primero = intentar();
+    if (!primero) {
       st.conexion = 'sin_servidor';
       render();
       return;
     }
-    cliente = este;
-    const b = base();
+    cliente = primero; // mientras tanto, las órdenes quedan esperando en este
+    empezarGracia(primero);
 
-    este.on('connect', () => {
-      if (este !== cliente) return;
-      este.subscribe([b + 'conexion', b + 'estado', b + 'historial'], { qos: 1 });
-      if (st.conexion !== 'en_linea') {
-        st.conexion = 'esperando';
-        render();
-      }
-      clearTimeout(esperaAlarma);
-      esperaAlarma = setTimeout(() => {
-        if (este === cliente && st.conexion === 'esperando') {
-          st.conexion = 'alarma_fuera';
-          render();
-        }
-      }, ESPERA_ALARMA_MS);
-    });
-
-    este.on('message', (tema, datos) => {
-      if (este !== cliente || !tema.startsWith(b)) return;
-      recibir(tema.slice(b.length), datos.toString());
-    });
-
-    este.on('offline', () => {
-      if (este !== cliente) return;
-      st.conexion = 'sin_servidor';
-      render();
-    });
-
-    este.on('error', () => {
-      if (este !== cliente) return;
-      if (st.conexion === 'conectando') {
-        st.conexion = 'sin_servidor';
-        render();
-      }
-    });
+    // Si en 1.2 s no conectó, se abre un segundo intento en paralelo
+    refuerzo = setTimeout(() => {
+      if (gen === generacion && !ganador) intentar();
+    }, 1200);
   }
 
   function recibir(tema, texto) {
@@ -398,6 +492,7 @@
         const h = JSON.parse(texto);
         if (Array.isArray(h)) {
           st.historial = h.filter((ev) => ev && typeof ev.e === 'string');
+          guardarUltimo();
           render();
         }
       } catch (e) { /* mensaje dañado: se ignora */ }
@@ -410,24 +505,36 @@
     probar: () => true,
   };
 
+  const EN_CAMINO = ['conectando', 'reconectando', 'esperando'];
+
   function enviar(cmd) {
     if (prefs.modo !== 'real') {
       demo.comando(cmd);
       return;
     }
-    if (!cliente || st.conexion !== 'en_linea') {
+    if (st.pendiente) return;
+
+    const conectado = !!(cliente && cliente.connected);
+    if (!cliente || (!conectado && !EN_CAMINO.includes(st.conexion)) || st.conexion === 'alarma_fuera') {
       nota('La alarma no está conectada. Revisa que esté enchufada y con WiFi.', 'error');
       return;
     }
-    if (st.pendiente) return;
-    cliente.publish(base() + 'cmd', cmd, { qos: 1, retain: false });
+
+    // Conectado: sale ya. Reconectando: espera y sale apenas haya conexión.
+    if (conectado) cliente.publish(base() + 'cmd', cmd, { qos: 1, retain: false });
+    else ordenEnEspera = cmd;
+
     st.pendiente = {
       cmd,
       timer: setTimeout(() => {
+        const nuncaSalio = ordenEnEspera !== null;
         st.pendiente = null;
-        nota('La alarma no respondió. Revisa que esté encendida y con WiFi.', 'error');
+        ordenEnEspera = null; // una orden vieja nunca debe llegar tarde a la alarma
+        nota(nuncaSalio
+          ? 'No se pudo conectar con la alarma. Revisa tu internet e inténtalo otra vez.'
+          : 'La alarma no respondió. Revisa que esté encendida y con WiFi.', 'error');
         render();
-      }, ESPERA_RESPUESTA_MS),
+      }, ESPERA_RESPUESTA_MS + (conectado ? 0 : GRACIA_MS)),
     };
     render();
   }
@@ -448,6 +555,7 @@
     if (entro || otraVez) avisarAlarma(nuevo);
 
     render();
+    guardarUltimo();
     if (entro || otraVez) golpeAlarma();
   }
 
@@ -518,8 +626,11 @@
   }
 
   function avisoConexion() {
+    // Si ya se sabe algo de la alarma, reconectar no merece un aviso: basta «Actualizando…» arriba
+    if (EN_CAMINO.includes(st.conexion) && st.alarma) return '';
     switch (st.conexion) {
       case 'conectando':
+      case 'reconectando':
         return aviso('wifi', 'Conectando…', `Buscando el servidor para hablar con <strong>${esc(prefs.codigo)}</strong>.`);
       case 'esperando':
         return aviso('wifi', 'Buscando tu alarma…', `Código <strong>${esc(prefs.codigo)}</strong>.`);
@@ -536,7 +647,7 @@
   // La tarjeta negra protagonista: estado, radar y accesos rápidos
   function heroe(a) {
     const real = prefs.modo === 'real';
-    const viejo = real && st.conexion !== 'en_linea';
+    const viejo = real && (st.conexion === 'alarma_fuera' || st.conexion === 'sin_servidor');
     let clase = 'heroe--' + a.estado;
     let centro = icono('escudo');
     let titulo = '';
@@ -607,7 +718,8 @@
   // Un solo botón fuerte: armar, desarmar o apagar
   function acciones(a) {
     const real = prefs.modo === 'real';
-    const apagada = real && st.conexion !== 'en_linea';
+    // Mientras reconecta los botones siguen activos: la orden espera y sale apenas conecta
+    const apagada = real && (st.conexion === 'alarma_fuera' || st.conexion === 'sin_servidor');
     const ocupado = !!st.pendiente;
     const deshabilitado = apagada || ocupado || !a;
     let principal;
@@ -951,7 +1063,9 @@
       case 'en_linea': return ['punto--ok', 'En línea'];
       case 'alarma_fuera': return ['punto--aviso', 'Sin conexión'];
       case 'sin_servidor': return ['punto--aviso', 'Sin internet'];
-      default: return ['', 'Conectando…'];
+      case 'reconectando':
+      case 'esperando': return ['punto--cargando', st.alarma ? 'Actualizando…' : 'Conectando…'];
+      default: return ['punto--cargando', 'Conectando…'];
     }
   }
 
@@ -1247,9 +1361,30 @@
     render();
   });
 
+  /*
+    Al volver a la app: si estuvo fuera más de un momento, el teléfono ya cortó
+    la conexión aunque la app no lo sepa. Se reconecta de una vez, sin borrar
+    lo que se ve ni la orden que esté esperando.
+  */
+  let ocultaDesde = 0;
+
+  function reanudarSiHaceFalta(forzar) {
+    if (prefs.modo !== 'real') return;
+    if (forzar || !cliente || !cliente.connected) conectar({ reanudar: true });
+  }
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && cliente && !cliente.connected) cliente.reconnect();
+    if (document.visibilityState === 'hidden') {
+      ocultaDesde = Date.now();
+      return;
+    }
+    const fuera = ocultaDesde ? Date.now() - ocultaDesde : 0;
+    ocultaDesde = 0;
+    reanudarSiHaceFalta(fuera > 1500);
   });
+
+  window.addEventListener('pageshow', (e) => { if (e.persisted) reanudarSiHaceFalta(true); });
+  window.addEventListener('online', () => reanudarSiHaceFalta(false));
 
   /* ---------- Arranque ---------- */
 
