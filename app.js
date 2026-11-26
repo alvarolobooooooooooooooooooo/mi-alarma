@@ -49,6 +49,7 @@
     reiniciar: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     derecha: '<path d="m9 18 6-6-6-6"/>',
     adelante: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    descargar: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
     diagonal: '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
@@ -423,7 +424,7 @@
           intentos = [c];
         }
         clearTimeout(gracia);
-        c.subscribe([b + 'conexion', b + 'estado', b + 'historial'], { qos: 1 });
+        c.subscribe([b + 'conexion', b + 'estado', b + 'historial', b + 'vapid'], { qos: 1 });
         registrarTelefono(c); // se repite en cada conexión: si la alarma lo olvidó, lo vuelve a anotar
         if (ordenEnEspera) {
           c.publish(b + 'cmd', ordenEnEspera, { qos: 1, retain: false });
@@ -475,6 +476,16 @@
   }
 
   function recibir(tema, texto) {
+    if (tema === 'vapid') {
+      // Cada alarma puede tener sus propias claves de avisos: si cambió, se vuelve a suscribir
+      if (/^[A-Za-z0-9_-]{80,}$/.test(texto)) {
+        st.vapid = texto;
+        if (prefs.avisos && prefs.vapidUsada && prefs.vapidUsada !== texto) {
+          suscribirAvisos().catch(() => { /* se reintenta al abrir la app */ });
+        }
+      }
+      return;
+    }
     if (tema === 'conexion') {
       st.conexion = texto === 'en_linea' ? 'en_linea' : 'alarma_fuera';
       render();
@@ -492,6 +503,8 @@
         avisos: d.avisos || 0,
         ultimoAviso: d.ultimoAviso || 0,
         motivo: typeof d.motivo === 'string' ? d.motivo : '',
+        fw: typeof d.fw === 'string' ? d.fw : '',
+        ota: typeof d.ota === 'string' ? d.ota : '',
       });
     } else if (tema === 'historial') {
       try {
@@ -510,6 +523,7 @@
     desarmar: (e) => e === 'desarmada',
     probar: () => true,
     'aviso-prueba': () => true,
+    actualizar: () => true,
   };
 
   const EN_CAMINO = ['conectando', 'reconectando', 'esperando'];
@@ -611,11 +625,19 @@
   }
 
   async function suscribirAvisos() {
+    const clave = st.vapid || VAPID_PUBLICA;
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveABytes(VAPID_PUBLICA) });
+    if (sub && prefs.vapidUsada && prefs.vapidUsada !== clave) {
+      // Suscrito con la clave de otra alarma: hay que darse de baja y volver a suscribirse
+      if (cliente && cliente.connected) cliente.publish(base() + 'push/baja', sub.endpoint, { qos: 1 });
+      await sub.unsubscribe();
+      sub = null;
     }
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveABytes(clave) });
+    }
+    prefs.vapidUsada = clave;
     prefs.pushDireccion = sub.endpoint;
     guardarPrefs();
     registrarTelefono(cliente);
@@ -650,6 +672,20 @@
     return caches.open('mi-alarma-datos')
       .then((c) => c.put('prueba-aviso', new Response(String(Date.now()))))
       .catch(() => {});
+  }
+
+  function textoActualizacion(a) {
+    const ota = (a && a.ota) || '';
+    if (ota === 'buscando') return 'Buscando una versión nueva…';
+    if (ota === 'al_dia') return 'Está al día.';
+    if (ota.startsWith('descargando')) {
+      const pct = ota.split(':')[1];
+      return `Descargando${pct ? ' ' + pct + ' %' : '…'} No la desconectes.`;
+    }
+    if (ota === 'listo') return 'Instalada. Se está reiniciando…';
+    if (ota === 'armada') return 'Desármala para poder actualizarla.';
+    if (ota === 'error') return 'No se pudo actualizar. Inténtalo más tarde.';
+    return '';
   }
 
   function textoUltimoAviso(a) {
@@ -965,7 +1001,15 @@
             <span class="fila-texto"><span class="fila-titulo">Conexión</span><span class="fila-sub">${real ? 'Código ' + esc(prefs.codigo) : 'Modo demostración'}</span></span>
             ${icono('derecha', 'ic--20 fila-flecha')}
           </button>
+          ${real && a && a.fw ? `<div class="fila">
+            <span class="fila-icono">${icono('descargar')}</span>
+            <span class="fila-texto"><span class="fila-titulo">Programa de la alarma</span><span class="fila-sub">Versión ${esc(a.fw)}${textoActualizacion(a) ? ' · ' + textoActualizacion(a) : ''}</span></span>
+          </div>` : ''}
         </div>
+        ${real && a && a.fw && st.conexion === 'en_linea'
+          ? boton({ cmd: 'actualizar', texto: 'Buscar actualización', tipo: 'suave', ic: 'descargar',
+                    deshabilitado: !!st.pendiente || (a.ota || '').startsWith('descargando') })
+          : ''}
       </section>
 
       <section class="grupo">
