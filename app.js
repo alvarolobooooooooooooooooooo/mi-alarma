@@ -742,7 +742,7 @@
       case 'alarma':
         centro = icono('escudoAlerta');
         titulo = '¡Movimiento detectado!';
-        texto = `${a.ultimo ? cuando(a.ultimo) + ' · ' : ''}${a.sirena ? 'La sirena está sonando.' : 'La sirena ya se apagó, pero sigue en alarma.'}`;
+        texto = a.sirena ? 'La sirena está sonando.' : 'La sirena ya se apagó, pero sigue en alarma.';
         break;
     }
     if (viejo) {
@@ -750,9 +750,11 @@
       texto += ' Es el último estado conocido.';
     }
 
-    const sensor = a.sensor
-      ? `<span class="punto punto--peligro"></span>Sensor: ve movimiento`
-      : `<span class="punto"></span>Sensor: quieto`;
+    // En vez de lo que ve el sensor: desde cuándo está así la alarma
+    const desde = desdeCuando(a);
+    const pastilla = desde
+      ? `<span class="pastilla-vidrio">${icono('reloj')}<span class="pastilla-texto">${desde}</span></span>`
+      : '<span></span>';
 
     // Accesos rápidos; durante la alarma no se muestran, para que «Apagar alarma» quede a la vista
     const accionesRapidas = [];
@@ -767,7 +769,7 @@
 
     return `<section class="heroe ${clase}">
       <div class="heroe-arriba">
-        <span class="pastilla-vidrio">${sensor}</span>
+        ${pastilla}
         <a class="circulo circulo--blanco" href="#historial" aria-label="Ver el historial">${icono('diagonal', 'ic--20')}</a>
       </div>
       <div class="radar" aria-hidden="true">
@@ -813,12 +815,37 @@
     </div>`;
   }
 
+  // «Desde las 10:32 p. m.»: el último evento que llevó a la alarma al estado actual
+  function desdeCuando(a) {
+    let seg = 0;
+    if (a.estado === 'alarma') {
+      seg = a.ultimo;
+    } else if (a.estado === 'vigilando' || a.estado === 'desarmada') {
+      const buscado = a.estado === 'vigilando' ? ['armada'] : ['desarmada', 'encendida'];
+      const ev = st.historial.find((e) => buscado.includes(e.e) && e.t);
+      seg = ev ? ev.t : 0;
+    }
+    if (!seg) return '';
+    const ms = seg * 1000;
+    const hora = fmtHora.format(ms);
+    const articulo = hora.startsWith('1:') ? 'la' : 'las';
+    const dia = etiquetaDia(ms);
+    if (dia === 'Hoy') return `Desde ${articulo} ${hora}`;
+    return `Desde ${dia === 'Ayer' ? 'ayer' : dia.toLowerCase()}, ${hora}`;
+  }
+
+  function fichaAvisos(a) {
+    if (prefs.modo !== 'real') return 'Demostración';
+    if (!a.avisos) return 'Desactivados';
+    return `${a.avisos} ${a.avisos === 1 ? 'teléfono' : 'teléfonos'}`;
+  }
+
   function detalles(a) {
     return `<section class="grupo">
       <h2 class="rotulo-seccion">Detalles</h2>
       <div class="mosaico">
-        ${ficha('persona', 'Sensor', a.sensor ? 'Ve movimiento' : 'Quieto', a.sensor ? 'peligro' : '')}
         ${ficha('reloj', 'Última detección', a.ultimo ? cuando(a.ultimo) : 'Ninguna')}
+        ${ficha('campana', 'Avisos', fichaAvisos(a))}
         ${ficha(typeof a.rssi === 'number' ? 'wifi' : 'wifiOff', 'Señal WiFi', senal(a.rssi))}
         ${ficha('enviar', 'Telegram', a.telegram ? 'Activado' : 'Sin configurar')}
       </div>

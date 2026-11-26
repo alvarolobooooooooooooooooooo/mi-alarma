@@ -376,6 +376,11 @@ h1, h2, h3 { text-wrap: balance; }
   backdrop-filter: blur(8px);
 }
 .pastilla-vidrio .ic { width: 18px; height: 18px; }
+.pastilla-texto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .circulo {
   width: 48px;
