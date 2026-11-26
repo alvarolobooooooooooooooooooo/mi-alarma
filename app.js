@@ -705,7 +705,7 @@
         return aviso('wifiOff', 'Sin internet', 'Este teléfono no llega al servidor. Revisa tus datos o tu WiFi: la app se vuelve a conectar sola.');
       case 'alarma_fuera':
         return aviso('wifiOff', 'Tu alarma no está conectada',
-          `Revisa que esté enchufada y que su WiFi funcione. La app busca el código <strong>${esc(prefs.codigo)}</strong>.`, true);
+          `Revisa que esté enchufada y que su WiFi funcione. ¿Cambiaste de WiFi o de casa? Conecta tu celular a la red que empieza con <strong>«MiAlarma»</strong> (la contraseña es tu código: <strong>${esc(prefs.codigo)}</strong>) y elige tu WiFi nuevo.`, true);
       default:
         return '';
     }
