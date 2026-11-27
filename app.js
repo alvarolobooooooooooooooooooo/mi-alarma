@@ -1456,24 +1456,101 @@
   $('#velo').addEventListener('click', () => cerrarHoja());
 
   /*
-    El teclado del iPhone tapa la parte de abajo sin achicar la pantalla.
-    visualViewport dice cuánto se ve de verdad: con eso se calcula cuánto
-    ocupa el teclado y la hoja se sube justo encima (ver .hoja en estilos.css).
+    Medidas de la pantalla en iPhone.
+    - El teclado tapa la parte de abajo sin achicar la pantalla. visualViewport
+      dice cuánto se ve de verdad: con eso se calcula cuánto ocupa el teclado y
+      la hoja se sube justo encima (ver .hoja en estilos.css).
+    - Con la app instalada, el iPhone a veces se queda con medidas viejas al
+      volver de otra app o después de usar el teclado, y la barra de pestañas
+      queda flotando a media pantalla. Por eso, sin teclado, la barra se pega
+      al borde de abajo de lo que se ve (--desfase-abajo). Y si la pantalla
+      quedó encogida, se le obliga a medirse de nuevo (curarPantalla).
   */
-  function ajustarTeclado() {
+  const instalada = navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+  const altoMaximo = new Map(); // ancho de la pantalla → alto más grande visto sin teclado
+  let ultimaCura = 0;
+  let curasSeguidas = 0;
+  let desfaseAbajo = 0;
+
+  function escribiendo() {
+    const a = document.activeElement;
+    return !!a && a.matches(
+      'textarea, select, [contenteditable="true"], ' +
+      'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="range"])'
+    );
+  }
+
+  // Esconder y volver a mostrar la página obliga al iPhone a medirla otra vez
+  function curarPantalla() {
+    const y = window.scrollY;
+    const hoja = document.getElementById('hoja');
+    const yHoja = hoja ? hoja.scrollTop : 0;
+    document.body.style.display = 'none';
+    void document.body.offsetHeight;
+    document.body.style.display = '';
+    void document.body.offsetHeight;
+    window.scrollTo(0, y);
+    if (hoja) hoja.scrollTop = yHoja;
+  }
+
+  function ajustarPantalla() {
     const vv = window.visualViewport;
-    if (!vv) return;
-    const teclado = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
     const raiz = document.documentElement;
+    const tecleando = escribiendo();
+    const sinZoom = !vv || Math.abs(vv.scale - 1) < 0.01;
+
+    if (instalada && !tecleando && sinZoom) {
+      const ancho = window.innerWidth;
+      const maximo = Math.max(altoMaximo.get(ancho) || 0, window.innerHeight);
+      altoMaximo.set(ancho, maximo);
+      if (window.innerHeight >= maximo - 4) {
+        curasSeguidas = 0;
+      } else if (curasSeguidas < 3 && Date.now() - ultimaCura > 500) {
+        curasSeguidas++;
+        ultimaCura = Date.now();
+        curarPantalla();
+      }
+    }
+    if (!vv) return;
+
+    const alto = window.innerHeight;
+    const teclado = Math.max(0, Math.round(alto - vv.height - vv.offsetTop));
+    // Mientras la página rebota al final del scroll, no se mueve la barra
+    const y = window.scrollY;
+    const rebotando = y < 0 || y + alto > document.documentElement.scrollHeight + 1;
+    if (tecleando || !sinZoom) {
+      desfaseAbajo = 0;
+    } else if (!rebotando) {
+      const d = Math.round(vv.offsetTop + vv.height - alto);
+      desfaseAbajo = Math.abs(d) < 2 ? 0 : d;
+    }
     raiz.style.setProperty('--teclado', `${teclado}px`);
     raiz.style.setProperty('--alto-visible', `${Math.round(vv.height)}px`);
+    raiz.style.setProperty('--desfase-abajo', `${desfaseAbajo}px`);
+    raiz.style.setProperty('--desfase-arriba', `${sinZoom ? Math.max(0, Math.round(vv.offsetTop)) : 0}px`);
     raiz.toggleAttribute('data-teclado', teclado > 0);
   }
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', ajustarTeclado);
-    window.visualViewport.addEventListener('scroll', ajustarTeclado);
-    ajustarTeclado();
+
+  // Al volver a la app el iPhone tarda un poco en acomodarse: se mide varias veces
+  let reajustes = [];
+  function reajustarPronto() {
+    reajustes.forEach(clearTimeout);
+    reajustes = [0, 150, 400, 1000].map((ms) => setTimeout(ajustarPantalla, ms));
   }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', ajustarPantalla);
+    window.visualViewport.addEventListener('scroll', ajustarPantalla);
+  }
+  window.addEventListener('resize', reajustarPronto);
+  window.addEventListener('orientationchange', reajustarPronto);
+  window.addEventListener('pageshow', reajustarPronto);
+  window.addEventListener('focus', reajustarPronto);
+  document.addEventListener('focusout', reajustarPronto);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') reajustarPronto();
+  });
+  ajustarPantalla();
 
   const hojaEl = $('#hoja');
   hojaEl.addEventListener('pointerdown', empezarArrastre);

@@ -885,6 +885,8 @@ button.fila, label.fila { cursor: pointer; }
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   pointer-events: none;
+  /* Si el iPhone se queda con medidas viejas, app.js la baja al borde real de la pantalla */
+  transform: translateY(var(--desfase-abajo, 0px));
 }
 
 /* Material translúcido: el contenido pasa por debajo, borroso */
@@ -992,6 +994,7 @@ button.fila, label.fila { cursor: pointer; }
 .velo {
   position: fixed;
   inset: 0;
+  bottom: min(0px, calc(-1 * var(--desfase-abajo, 0px)));
   z-index: 40;
   background: var(--velo);
   opacity: 0;
@@ -1006,7 +1009,7 @@ button.fila, label.fila { cursor: pointer; }
   position: fixed;
   left: 0;
   right: 0;
-  bottom: var(--teclado, 0px);
+  bottom: calc(var(--teclado, 0px) - var(--desfase-abajo, 0px));
   z-index: 50;
   max-width: var(--columna);
   max-height: min(90dvh, calc(var(--alto-visible, 100dvh) - var(--e-6)));
@@ -1161,7 +1164,7 @@ button.fila, label.fila { cursor: pointer; }
 
 .nota {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + var(--e-3));
+  top: calc(env(safe-area-inset-top, 0px) + var(--e-3) + var(--desfase-arriba, 0px));
   left: 50%;
   z-index: 60;
   width: max-content;
