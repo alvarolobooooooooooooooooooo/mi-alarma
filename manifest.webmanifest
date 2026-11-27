@@ -1,6 +1,6 @@
 {
-  "name": "Mi Alarma",
-  "short_name": "Mi Alarma",
+  "name": "BloK",
+  "short_name": "BloK",
   "description": "Arma, desarma y vigila tu alarma desde el teléfono.",
   "lang": "es",
   "start_url": "./#inicio",

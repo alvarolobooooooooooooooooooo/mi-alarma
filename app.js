@@ -1106,7 +1106,7 @@
 
       ${real ? '' : `<section class="grupo">${boton({ accion: 'reiniciar-demo', texto: 'Reiniciar la demostración', tipo: 'suave', ic: 'reiniciar' })}</section>`}
 
-      <p class="pie">Mi Alarma · versión ${VERSION} · prototipo</p>`;
+      <p class="pie">BloK · versión ${VERSION} · prototipo</p>`;
   }
 
   /* ---------- Hojas (lo que se llena sube desde abajo) ---------- */
@@ -1335,7 +1335,7 @@
     pintar($('#chip'), `<span class="chip-cuerpo"><span class="punto ${clase}"></span>${texto}</span><span class="sr">. Toca para cambiar la conexión</span>`);
 
     const sonando = !!(st.alarma && st.alarma.estado === 'alarma');
-    document.title = sonando ? '¡Alarma! · Mi Alarma' : 'Mi Alarma';
+    document.title = sonando ? '¡Alarma! · BloK' : 'BloK';
     $('#insigniaInicio').hidden = !sonando;
     document.querySelectorAll('.pestana').forEach((p) => {
       if (p.dataset.vista === st.vista) p.setAttribute('aria-current', 'page');
