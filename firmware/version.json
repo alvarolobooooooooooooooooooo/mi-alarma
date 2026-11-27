@@ -1,6 +1,6 @@
 {
-  "numero": 5,
-  "version": "1.4",
-  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-5.bin",
-  "notas": "Servidor privado con contraseña y conexión cifrada."
+  "numero": 6,
+  "version": "1.5",
+  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-6.bin",
+  "notas": "La lista de redes del modo configuración ya no sale vacía."
 }
