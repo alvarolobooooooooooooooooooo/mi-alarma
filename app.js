@@ -528,6 +528,8 @@
         fw: typeof d.fw === 'string' ? d.fw : '',
         ota: typeof d.ota === 'string' ? d.ota : '',
         sens: ['alta', 'normal', 'baja'].includes(d.sens) ? d.sens : '',
+        doble: d.doble === undefined ? null : (d.doble ? 1 : 0),
+        radarN: typeof d.radarN === 'number' ? d.radarN : null,
         calentando: d.calentando ? 1 : 0,
       });
     } else if (tema === 'historial') {
@@ -1026,10 +1028,21 @@
             <span class="fila-texto"><span class="fila-titulo">${s.titulo}</span><span class="fila-sub">${s.texto}</span></span>
             <input type="radio" class="opcion" name="sens" id="sens-${s.valor}" value="${s.valor}"${actual === s.valor ? ' checked' : ''}${deshabilitado ? ' disabled' : ''}>
           </label>`).join('');
+    // Doble confirmación (sensor de calor + radar): solo si la alarma la informa (2.2 en adelante)
+    const a = st.alarma;
+    const filaDoble = real && a && a.doble != null ? `
+        <div class="lista">
+          <label class="fila" for="swDoble">
+            <span class="fila-texto"><span class="fila-titulo">Doble confirmación</span><span class="fila-sub">${a.radarN
+              ? 'Suena solo si el sensor de calor y el radar ven movimiento a la vez.'
+              : 'Ojo: el radar no ha detectado nada desde que se encendió la alarma. Revisa que esté conectado o apaga esto.'}</span></span>
+            <input type="checkbox" role="switch" class="interruptor" id="swDoble"${a.doble ? ' checked' : ''}${deshabilitado ? ' disabled' : ''}>
+          </label>
+        </div>` : '';
     return `<section class="grupo">
         <h2 class="rotulo-seccion">Sensibilidad del sensor</h2>
         <div class="lista" role="radiogroup" aria-label="Sensibilidad del sensor">${filas}
-        </div>
+        </div>${filaDoble}
         <p class="ayuda-lista">Si a veces no te detecta, súbela. Si da falsas alarmas, bájala. También ayuda que el sensor vea pasar a la gente de lado, no de frente.</p>
       </section>`;
   }
@@ -1642,6 +1655,12 @@
       prefs.letraGrande = e.target.checked;
       guardarPrefs();
       aplicarLetra();
+      return;
+    }
+
+    if (e.target.id === 'swDoble') {
+      enviar('doble:' + (e.target.checked ? '1' : '0'));
+      nota(e.target.checked ? 'Doble confirmación activada: suena con el sensor de calor y el radar.' : 'Doble confirmación apagada: suena solo con el sensor de calor.');
       return;
     }
 

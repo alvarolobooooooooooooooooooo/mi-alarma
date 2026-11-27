@@ -1,6 +1,6 @@
 {
-  "numero": 12,
-  "version": "2.1",
-  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-12.bin",
-  "notas": "Radar RCWL-0516 en modo prueba (D32, solo lo reporta) y la tierra de la sirena en D33."
+  "numero": 13,
+  "version": "2.2",
+  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-13.bin",
+  "notas": "Doble confirmación: una detección cuenta solo si el sensor de calor y el radar ven movimiento a la vez (se puede apagar en Ajustes)."
 }
