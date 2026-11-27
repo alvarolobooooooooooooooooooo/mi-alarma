@@ -1,6 +1,6 @@
 {
-  "numero": 7,
-  "version": "1.6",
-  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-7.bin",
-  "notas": "Sensibilidad del sensor ajustable desde la app (alta, normal, baja)."
+  "numero": 8,
+  "version": "1.7",
+  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-8.bin",
+  "notas": "Una sola detección falsa ya no basta para que suene (la alarma aprende cuánto dura una detección suelta)."
 }
