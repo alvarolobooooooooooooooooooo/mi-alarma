@@ -527,6 +527,7 @@
         motivo: typeof d.motivo === 'string' ? d.motivo : '',
         fw: typeof d.fw === 'string' ? d.fw : '',
         ota: typeof d.ota === 'string' ? d.ota : '',
+        sens: ['alta', 'normal', 'baja'].includes(d.sens) ? d.sens : '',
       });
     } else if (tema === 'historial') {
       try {
@@ -588,7 +589,7 @@
     const antes = st.alarma;
     st.alarma = nuevo;
 
-    if (st.pendiente && RESPUESTA_ESPERADA[st.pendiente.cmd](nuevo.estado)) {
+    if (st.pendiente && (RESPUESTA_ESPERADA[st.pendiente.cmd] || (() => true))(nuevo.estado)) {
       clearTimeout(st.pendiente.timer);
       st.pendiente = null;
     }
@@ -999,6 +1000,35 @@
       </section>`).join('') + `<p class="pie">${pie}</p>`;
   }
 
+  const SENSIBILIDADES = [
+    { valor: 'alta', titulo: 'Alta', texto: 'Suena con la primera detección. Puede dar alguna falsa alarma.' },
+    { valor: 'normal', titulo: 'Normal (recomendada)', texto: 'Dos detecciones seguidas, o unos segundos de movimiento.' },
+    { valor: 'baja', titulo: 'Baja', texto: 'Solo movimiento claro. Para lugares con cortinas, sol o mascotas.' },
+  ];
+
+  function sensibilidadActual() {
+    if (prefs.modo !== 'real') return prefs.sensDemo || 'normal';
+    return (st.alarma && st.alarma.sens) || '';
+  }
+
+  function seccionSensor() {
+    const real = prefs.modo === 'real';
+    const actual = sensibilidadActual();
+    if (real && !actual) return ''; // la alarma todavía no la informa (versión vieja o sin conexión)
+    const deshabilitado = real && (st.conexion !== 'en_linea' || !!st.pendiente);
+    const filas = SENSIBILIDADES.map((s) => `
+          <label class="fila" for="sens-${s.valor}">
+            <span class="fila-texto"><span class="fila-titulo">${s.titulo}</span><span class="fila-sub">${s.texto}</span></span>
+            <input type="radio" class="opcion" name="sens" id="sens-${s.valor}" value="${s.valor}"${actual === s.valor ? ' checked' : ''}${deshabilitado ? ' disabled' : ''}>
+          </label>`).join('');
+    return `<section class="grupo">
+        <h2 class="rotulo-seccion">Sensibilidad del sensor</h2>
+        <div class="lista" role="radiogroup" aria-label="Sensibilidad del sensor">${filas}
+        </div>
+        <p class="ayuda-lista">Si a veces no te detecta, súbela. Si da falsas alarmas, bájala. También ayuda que el sensor vea pasar a la gente de lado, no de frente.</p>
+      </section>`;
+  }
+
   function vistaAjustes() {
     const real = prefs.modo === 'real';
     const a = st.alarma;
@@ -1055,6 +1085,8 @@
         ${ayudaAvisos ? `<p class="ayuda-lista">${ayudaAvisos}</p>` : ''}
         ${conPush ? boton({ accion: 'aviso-prueba', texto: 'Mandarme un aviso de prueba', tipo: 'suave', ic: 'campana', deshabilitado: !!st.pendiente }) : ''}
       </section>
+
+      ${seccionSensor()}
 
       <section class="grupo">
         <h2 class="rotulo-seccion">Pantalla</h2>
@@ -1286,7 +1318,7 @@
   function parcharElemento(v, n) {
     Array.from(v.attributes).forEach((a) => { if (!n.hasAttribute(a.name)) v.removeAttribute(a.name); });
     Array.from(n.attributes).forEach((a) => { if (v.getAttribute(a.name) !== a.value) v.setAttribute(a.name, a.value); });
-    if (v.tagName === 'INPUT' && v.type === 'checkbox') v.checked = n.hasAttribute('checked');
+    if (v.tagName === 'INPUT' && (v.type === 'checkbox' || v.type === 'radio')) v.checked = n.hasAttribute('checked');
     parcharHijos(v, n);
   }
 
@@ -1528,6 +1560,19 @@
       prefs.letraGrande = e.target.checked;
       guardarPrefs();
       aplicarLetra();
+      return;
+    }
+
+    if (e.target.name === 'sens') {
+      const valor = e.target.value;
+      if (prefs.modo !== 'real') {
+        prefs.sensDemo = valor;
+        guardarPrefs();
+        render();
+      } else {
+        enviar('sens:' + valor);
+      }
+      nota(`Sensibilidad: ${valor}.`);
       return;
     }
 
