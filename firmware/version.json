@@ -1,6 +1,6 @@
 {
-  "numero": 9,
-  "version": "1.8",
-  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-9.bin",
-  "notas": "Recién enchufada, la app avisa que el sensor se está preparando y la alarma no dice «Vigilando» hasta que esté listo."
+  "numero": 10,
+  "version": "1.9",
+  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-10.bin",
+  "notas": "En sensibilidad Baja la alarma pide 3 detecciones en 30 s (antes 2 en 20 s), contra las falsas alarmas."
 }

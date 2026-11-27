@@ -1008,7 +1008,7 @@
   const SENSIBILIDADES = [
     { valor: 'alta', titulo: 'Alta', texto: 'Suena con la primera detección. Puede dar alguna falsa alarma.' },
     { valor: 'normal', titulo: 'Normal (recomendada)', texto: 'Dos detecciones seguidas, o unos segundos de movimiento.' },
-    { valor: 'baja', titulo: 'Baja', texto: 'Solo movimiento claro. Para lugares con cortinas, sol o mascotas.' },
+    { valor: 'baja', titulo: 'Baja', texto: 'Tres detecciones seguidas. Para lugares con cortinas, sol o mascotas.' },
   ];
 
   function sensibilidadActual() {
