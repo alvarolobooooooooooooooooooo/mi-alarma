@@ -14,7 +14,10 @@
 
 (function () {
   const VERSION = '0.1.0';
-  const SERVIDOR_POR_DEFECTO = 'wss://broker.hivemq.com:8884/mqtt';
+  // Servidor privado (EMQX Cloud): pide usuario (el código) y contraseña, y cada
+  // alarma solo puede ver sus propios mensajes.
+  const SERVIDOR_POR_DEFECTO = 'wss://d0f1e1f1.ala.us-east-1.emqxsl.com:8084/mqtt';
+  const SERVIDOR_PUBLICO = 'wss://broker.hivemq.com:8884/mqtt'; // el de las primeras pruebas, sin contraseña
   // Clave pública VAPID para los avisos push. La privada está SOLO en el ESP32.
   const VAPID_PUBLICA = 'BNg-CiMbkg8YUMRybTuJ_go0YIAGGwKJCg62iQKR6rVweDR-i0zs0IAFPz1icFT5fhaHcoSZjuteW8mZ2cQ_CG0';
   const CLAVE_PREFS = 'mi-alarma:prefs';
@@ -70,9 +73,12 @@
   }
 
   const prefs = Object.assign(
-    { nombre: 'Casa', modo: 'demo', codigo: '', servidor: SERVIDOR_POR_DEFECTO, avisos: false, letraGrande: false },
+    { nombre: 'Casa', modo: 'demo', codigo: '', clave: '', servidor: SERVIDOR_POR_DEFECTO, avisos: false, letraGrande: false },
     leerPrefs()
   );
+  // Quien venía usando el servidor público pasa al privado (ahí está ahora su alarma)
+  if (prefs.servidor === SERVIDOR_PUBLICO) prefs.servidor = SERVIDOR_POR_DEFECTO;
+  const pideClave = () => prefs.servidor !== SERVIDOR_PUBLICO;
 
   function guardarPrefs() {
     try { localStorage.setItem(CLAVE_PREFS, JSON.stringify(prefs)); } catch (e) { /* sin almacenamiento: la app sigue funcionando */ }
@@ -385,6 +391,12 @@
       return;
     }
 
+    if (pideClave() && !prefs.clave) {
+      st.conexion = 'sin_permiso';
+      render();
+      return;
+    }
+
     st.conexion = st.alarma ? 'reconectando' : 'conectando';
     render();
 
@@ -398,6 +410,8 @@
       try {
         c = window.mqtt.connect(prefs.servidor, {
           clientId: 'app-' + Math.random().toString(16).slice(2, 10),
+          username: pideClave() ? prefs.codigo : undefined,
+          password: pideClave() ? prefs.clave : undefined,
           clean: true,
           keepalive: 20,
           // El servidor gratuito a veces no contesta un intento: mejor rendirse
@@ -446,6 +460,14 @@
       c.on('message', (tema, datos) => {
         if (gen !== generacion || c !== cliente || !tema.startsWith(b)) return;
         recibir(tema.slice(b.length), datos.toString());
+      });
+
+      c.on('error', (err) => {
+        // 4 = usuario o contraseña incorrectos · 5 = no autorizado (también en MQTT 5: 134/135)
+        if (gen !== generacion || !err || ![4, 5, 134, 135].includes(err.code)) return;
+        desconectar();
+        st.conexion = 'sin_permiso';
+        render();
       });
 
       c.on('offline', () => {
@@ -527,6 +549,7 @@
   };
 
   const EN_CAMINO = ['conectando', 'reconectando', 'esperando'];
+  const SIN_ALARMA = ['alarma_fuera', 'sin_servidor', 'sin_permiso'];
 
   function enviar(cmd) {
     if (prefs.modo !== 'real') {
@@ -723,7 +746,7 @@
       <div class="aviso-cuerpo">
         <h2 class="aviso-titulo">${titulo}</h2>
         <p class="aviso-texto">${texto}</p>
-        ${conEnlace ? '<button type="button" class="enlace" data-accion="conectar">Revisar el código</button>' : ''}
+        ${conEnlace ? '<button type="button" class="enlace" data-accion="conectar">Revisar la conexión</button>' : ''}
       </div>
     </section>`;
   }
@@ -737,6 +760,10 @@
         return aviso('wifi', 'Conectando…', `Buscando el servidor para hablar con <strong>${esc(prefs.codigo)}</strong>.`);
       case 'esperando':
         return aviso('wifi', 'Buscando tu alarma…', `Código <strong>${esc(prefs.codigo)}</strong>.`);
+      case 'sin_permiso':
+        return prefs.clave
+          ? aviso('wifiOff', 'La contraseña no es correcta', 'El servidor no aceptó el código y la contraseña. Revísalos: distinguen mayúsculas y minúsculas.', true)
+          : aviso('wifiOff', 'Falta la contraseña', 'Escribe la contraseña de tu alarma para conectarte.', true);
       case 'sin_servidor':
         return aviso('wifiOff', 'Sin internet', 'Este teléfono no llega al servidor. Revisa tus datos o tu WiFi: la app se vuelve a conectar sola.');
       case 'alarma_fuera':
@@ -750,7 +777,7 @@
   // La tarjeta negra protagonista: estado, radar y accesos rápidos
   function heroe(a) {
     const real = prefs.modo === 'real';
-    const viejo = real && (st.conexion === 'alarma_fuera' || st.conexion === 'sin_servidor');
+    const viejo = real && SIN_ALARMA.includes(st.conexion);
     let clase = 'heroe--' + a.estado;
     let centro = icono('escudo');
     let titulo = '';
@@ -824,7 +851,7 @@
   function acciones(a) {
     const real = prefs.modo === 'real';
     // Mientras reconecta los botones siguen activos: la orden espera y sale apenas conecta
-    const apagada = real && (st.conexion === 'alarma_fuera' || st.conexion === 'sin_servidor');
+    const apagada = real && SIN_ALARMA.includes(st.conexion);
     const ocupado = !!st.pendiente;
     const deshabilitado = apagada || ocupado || !a;
     let principal;
@@ -1166,13 +1193,20 @@
   function hojaConexion() {
     const real = prefs.modo === 'real';
     abrirHoja('Conectar con tu alarma', `<form class="formulario" id="formConexion" novalidate>
-      <p class="hoja-texto">Escribe el mismo código que pusiste en el ESP32, en la línea <code>CODIGO_ALARMA</code>.</p>
+      <p class="hoja-texto">Escribe el código y la contraseña de tu alarma. Son los mismos para toda tu familia.</p>
       <div class="campo">
         <label for="inCodigo">Código de la alarma</label>
         <input id="inCodigo" name="codigo" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
                placeholder="casa-4q8z2w" value="${esc(prefs.codigo)}" aria-describedby="ayCodigo errCodigo">
         <p class="campo-ayuda" id="ayCodigo">Letras minúsculas, números y guiones. Mínimo 6.</p>
         <p class="campo-error" id="errCodigo" hidden></p>
+      </div>
+      <div class="campo">
+        <label for="inClave">Contraseña de la alarma</label>
+        <input id="inClave" name="clave" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false"
+               value="${esc(prefs.clave || '')}" aria-describedby="ayClave errClave">
+        <p class="campo-ayuda" id="ayClave">Distingue mayúsculas y minúsculas.</p>
+        <p class="campo-error" id="errClave" hidden></p>
       </div>
       <details class="avanzado">
         <summary>Servidor (avanzado)</summary>
@@ -1210,6 +1244,7 @@
       case 'en_linea': return ['punto--ok', 'En línea'];
       case 'alarma_fuera': return ['punto--aviso', 'Sin conexión'];
       case 'sin_servidor': return ['punto--aviso', 'Sin internet'];
+      case 'sin_permiso': return ['punto--aviso', 'Revisa la contraseña'];
       case 'reconectando':
       case 'esperando': return ['punto--cargando', st.alarma ? 'Actualizando…' : 'Conectando…'];
       default: return ['punto--cargando', 'Conectando…'];
@@ -1440,6 +1475,8 @@
     if (f.id === 'formConexion') {
       const inCodigo = f.elements.codigo;
       const inServidor = f.elements.servidor;
+      const inClave = f.elements.clave;
+      const clave = inClave.value.trim();
       const codigo = inCodigo.value.trim().toLowerCase();
       const servidor = inServidor.value.trim() || SERVIDOR_POR_DEFECTO;
       let ok = true;
@@ -1449,6 +1486,13 @@
         ok = false;
       } else {
         marcarError(inCodigo, 'errCodigo', '');
+      }
+
+      if (servidor !== SERVIDOR_PUBLICO && !clave) {
+        marcarError(inClave, 'errClave', 'Escribe la contraseña de la alarma.');
+        ok = false;
+      } else {
+        marcarError(inClave, 'errClave', '');
       }
 
       if (!/^wss?:\/\/[^\s]+$/.test(servidor)) {
@@ -1470,6 +1514,7 @@
 
       prefs.modo = 'real';
       prefs.codigo = codigo;
+      prefs.clave = clave;
       prefs.servidor = servidor;
       guardarPrefs();
       cerrarHoja();
