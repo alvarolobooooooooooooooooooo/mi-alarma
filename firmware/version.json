@@ -1,6 +1,6 @@
 {
-  "numero": 11,
-  "version": "2.0",
-  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-11.bin",
-  "notas": "La sirena suena hasta que la apagas desde el celular, o 3 minutos como máximo. Incluye lo de la 1.9: en Baja pide 3 detecciones."
+  "numero": 12,
+  "version": "2.1",
+  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-12.bin",
+  "notas": "Radar RCWL-0516 en modo prueba (D32, solo lo reporta) y la tierra de la sirena en D33."
 }
