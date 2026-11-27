@@ -528,6 +528,7 @@
         fw: typeof d.fw === 'string' ? d.fw : '',
         ota: typeof d.ota === 'string' ? d.ota : '',
         sens: ['alta', 'normal', 'baja'].includes(d.sens) ? d.sens : '',
+        calentando: d.calentando ? 1 : 0,
       });
     } else if (tema === 'historial') {
       try {
@@ -787,14 +788,18 @@
     switch (a.estado) {
       case 'desarmada':
         titulo = 'Desarmada';
-        texto = 'No está vigilando. Ármala antes de salir.';
+        texto = !viejo && a.calentando
+          ? 'Recién encendida: el sensor tarda un minuto en estar listo. Puedes armarla igual.'
+          : 'No está vigilando. Ármala antes de salir.';
         break;
       case 'armando':
         titulo = 'Armándose';
         if (viejo) {
           texto = 'Se estaba armando cuando se perdió la conexión.';
         } else {
-          texto = 'Sal de la zona del sensor antes de que empiece a vigilar.';
+          texto = a.calentando
+            ? 'El sensor se está preparando: tarda un minuto después de enchufarla. Empieza a vigilar solo.'
+            : 'Sal de la zona del sensor antes de que empiece a vigilar.';
           centro = `<span class="cuenta"><span data-cuenta>${segundosRestantes(a)}</span><small>s</small></span>`;
         }
         break;
