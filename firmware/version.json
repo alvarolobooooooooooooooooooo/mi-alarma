@@ -1,6 +1,6 @@
 {
-  "numero": 13,
-  "version": "2.2",
-  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-13.bin",
-  "notas": "Doble confirmación: una detección cuenta solo si el sensor de calor y el radar ven movimiento a la vez (se puede apagar en Ajustes)."
+  "numero": 14,
+  "version": "2.3",
+  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-14.bin",
+  "notas": "Manda a la app cómo están el sensor de calor y el radar (Ajustes → Sensores)."
 }

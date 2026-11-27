@@ -528,7 +528,12 @@
         fw: typeof d.fw === 'string' ? d.fw : '',
         ota: typeof d.ota === 'string' ? d.ota : '',
         sens: ['alta', 'normal', 'baja'].includes(d.sens) ? d.sens : '',
+        radar: d.radar ? 1 : 0,
         doble: d.doble === undefined ? null : (d.doble ? 1 : 0),
+        pirN: typeof d.pirN === 'number' ? d.pirN : null,
+        pirUlt: typeof d.pirHace === 'number' ? (d.pirHace >= 0 ? Date.now() - d.pirHace * 1000 : 0) : null,
+        radarUlt: typeof d.radarHace === 'number' ? (d.radarHace >= 0 ? Date.now() - d.radarHace * 1000 : 0) : null,
+        encendida: typeof d.seg === 'number' ? Date.now() - d.seg * 1000 : null,
         radarN: typeof d.radarN === 'number' ? d.radarN : null,
         calentando: d.calentando ? 1 : 0,
       });
@@ -1018,6 +1023,42 @@
     return (st.alarma && st.alarma.sens) || '';
   }
 
+  // «hace 3 min», «hace un momento»…
+  function haceTexto(ms) {
+    const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 10) return 'hace un momento';
+    if (s < 60) return `hace ${s} s`;
+    if (s < 3600) return `hace ${Math.round(s / 60)} min`;
+    if (s < 86400) { const h = Math.round(s / 3600); return `hace ${h} ${h === 1 ? 'hora' : 'horas'}`; }
+    const d = Math.round(s / 86400); return `hace ${d} ${d === 1 ? 'día' : 'días'}`;
+  }
+
+  // Ajustes → Sensores: si el sensor de calor y el radar están trabajando (se actualiza en vivo)
+  function seccionSensores() {
+    const a = st.alarma;
+    if (prefs.modo !== 'real' || !a || a.pirN == null) return '';
+    const fuera = SIN_ALARMA.includes(st.conexion);
+    const estado = (vivo, n, ult) => {
+      if (fuera) return 'Sin conexión con la alarma: no se puede revisar ahora.';
+      if (vivo) return 'Funcionando · está viendo movimiento ahora.';
+      if (n > 0) return `Funcionando · detectó ${haceTexto(ult)} · ${n} ${n === 1 ? 'vez' : 'veces'} desde que se encendió.`;
+      return `No ha detectado nada desde que se encendió${a.encendida ? ' (' + haceTexto(a.encendida) + ')' : ''}. Pasa frente a él para probarlo.`;
+    };
+    const fila = (ic, titulo, sub) => `
+          <div class="fila">
+            <span class="fila-icono">${icono(ic)}</span>
+            <span class="fila-texto"><span class="fila-titulo">${titulo}</span><span class="fila-sub">${sub}</span></span>
+          </div>`;
+    const filas = fila('persona', 'Sensor de calor', estado(a.sensor, a.pirN, a.pirUlt)) +
+      (a.radarN != null ? fila('wifi', 'Radar', estado(a.radar, a.radarN, a.radarUlt)) : '');
+    return `<section class="grupo">
+        <h2 class="rotulo-seccion">Sensores</h2>
+        <div class="lista">${filas}
+        </div>
+        <p class="ayuda-lista">Se actualiza en vivo: pasa frente a la alarma y mira cómo cambia. Si uno nunca detecta nada, revisa sus cables.</p>
+      </section>`;
+  }
+
   function seccionSensor() {
     const real = prefs.modo === 'real';
     const actual = sensibilidadActual();
@@ -1103,6 +1144,8 @@
         ${ayudaAvisos ? `<p class="ayuda-lista">${ayudaAvisos}</p>` : ''}
         ${conPush ? boton({ accion: 'aviso-prueba', texto: 'Mandarme un aviso de prueba', tipo: 'suave', ic: 'campana', deshabilitado: !!st.pendiente }) : ''}
       </section>
+
+      ${seccionSensores()}
 
       ${seccionSensor()}
 
