@@ -1,6 +1,6 @@
 {
-  "numero": 14,
-  "version": "2.3",
-  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-14.bin",
-  "notas": "Manda a la app cómo están el sensor de calor y el radar (Ajustes → Sensores)."
+  "numero": 15,
+  "version": "2.4",
+  "url": "https://alvarolobooooooooooooooooooo.github.io/mi-alarma/firmware/MiAlarma-15.bin",
+  "notas": "Avisos más rápidos al celular que usas, y «Apagar alarma» funciona al instante aunque esté mandando avisos."
 }
